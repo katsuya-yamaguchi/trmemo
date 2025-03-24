@@ -1,0 +1,14 @@
+{
+  "name": "trmemo",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "mobile": "pnpm --filter @trmemo/mobile start",
+    "backend": "pnpm --filter @trmemo/backend dev",
+    "shared:build": "pnpm --filter @trmemo/shared build",
+    "dev": "pnpm run shared:build && concurrently \"pnpm run mobile\" \"pnpm run backend\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  }
+}
