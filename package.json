@@ -10,5 +10,8 @@
   },
   "devDependencies": {
     "concurrently": "^8.2.0"
+  },
+  "dependencies": {
+    "expo-constants": "~17.0.8"
   }
 }
