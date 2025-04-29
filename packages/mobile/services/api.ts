@@ -3,7 +3,7 @@ import Constants from 'expo-constants';
 import { supabase } from '../lib/supabase';
 
 // APIのベースURL
-const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:5000/api';
+const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
 
 // ヘルパー関数: APIリクエストの基本設定
 async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {

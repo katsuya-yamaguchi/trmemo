@@ -20,7 +20,7 @@ export default ({ config }) => {
         ...config.expo?.extra,
         supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
         supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
-        apiUrl: process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api',
+        apiUrl: process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api',
         eas: {
           projectId: "6bc45026-9071-479e-bdcf-fd7661988797"
         }
