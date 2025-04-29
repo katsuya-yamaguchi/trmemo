@@ -1,24 +1,33 @@
-import { useState, useEffect } from "react"
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, SafeAreaView } from "react-native"
+import React, { useState, useEffect } from "react"
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, SafeAreaView, ActivityIndicator } from "react-native"
 import { useRoute } from "@react-navigation/native"
 import { useTheme } from "../context/theme-context"
+import { useAuth } from "../context/auth-context"
 import { Card } from "../components/ui/card"
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
 import ExerciseVideoModal from "../components/exercise-video-modal"
 import WorkoutCompleteModal from "../components/workout-complete-modal"
 import { CheckCircle, Clock, Play, Pause, RotateCcw, Share2, Info } from "lucide-react-native"
+import { workoutApi } from "../services/api"
+
+interface ExerciseData {
+  name: string;
+  description: string;
+  tips: string[];
+}
 
 export default function TrainingDetailScreen() {
   const route = useRoute()
   const { colors } = useTheme()
+  const { user } = useAuth()
   const { workout } = route.params as any
 
   const [exercises, setExercises] = useState(
     workout.exercises.map((ex) => ({
       ...ex,
       sets: Array(ex.sets)
-        .fill()
+        .fill(null)
         .map(() => ({
           weight: "",
           reps: "",
@@ -29,12 +38,34 @@ export default function TrainingDetailScreen() {
 
   const [activeExercise, setActiveExercise] = useState(0)
   const [isTimerRunning, setIsTimerRunning] = useState(false)
-  const [restTime, setRestTime] = useState(60) // 60 seconds rest
+  const [restTime, setRestTime] = useState(60)
   const [timeLeft, setTimeLeft] = useState(restTime)
   const [workoutCompleted, setWorkoutCompleted] = useState(false)
   const [videoModalVisible, setVideoModalVisible] = useState(false)
-  const [selectedExercise, setSelectedExercise] = useState(null)
+  const [selectedExercise, setSelectedExercise] = useState<ExerciseData | null>(null)
   const [completeModalVisible, setCompleteModalVisible] = useState(false)
+  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+
+  // セッション開始
+  useEffect(() => {
+    const startSession = async () => {
+      if (!user?.id || !workout?.dayId) return
+      
+      try {
+        setIsLoading(true)
+        const response = await workoutApi.startTrainingSession(user.id, workout.dayId)
+        setSessionId(response.session.id)
+      } catch (error) {
+        console.error('セッション開始エラー:', error)
+        Alert.alert('エラー', 'トレーニングセッションの開始に失敗しました')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    startSession()
+  }, [user, workout])
 
   useEffect(() => {
     let interval
@@ -50,25 +81,47 @@ export default function TrainingDetailScreen() {
     return () => clearInterval(interval)
   }, [isTimerRunning, timeLeft])
 
-  const handleSetComplete = (exerciseIndex, setIndex) => {
-    const updatedExercises = [...exercises]
-    updatedExercises[exerciseIndex].sets[setIndex].completed = true
-    setExercises(updatedExercises)
-
-    // Check if all sets in current exercise are completed
-    const allSetsCompleted = updatedExercises[exerciseIndex].sets.every((set) => set.completed)
-
-    if (allSetsCompleted && exerciseIndex < exercises.length - 1) {
-      // Move to next exercise if all sets are completed
-      setActiveExercise(exerciseIndex + 1)
-    } else if (allSetsCompleted && exerciseIndex === exercises.length - 1) {
-      // All exercises completed
-      checkWorkoutCompletion()
+  const handleSetComplete = async (exerciseIndex, setIndex) => {
+    if (!sessionId) {
+      Alert.alert('エラー', 'セッションが開始されていません')
+      return
     }
 
-    // Start rest timer
-    setTimeLeft(restTime)
-    setIsTimerRunning(true)
+    try {
+      // 現在のセットを完了済みにマーク
+      const updatedExercises = [...exercises]
+      updatedExercises[exerciseIndex].sets[setIndex].completed = true
+      
+      // APIにセットを記録
+      await workoutApi.recordExerciseSet(
+        sessionId,
+        updatedExercises[exerciseIndex].id || 'exercise-id', // 実際にはAPIから取得したIDを使用
+        setIndex + 1,
+        parseFloat(updatedExercises[exerciseIndex].sets[setIndex].weight) || 0,
+        parseInt(updatedExercises[exerciseIndex].sets[setIndex].reps) || 0
+      )
+      
+      // ステート更新
+      setExercises(updatedExercises)
+
+      // 全セット完了チェック
+      const allSetsCompleted = updatedExercises[exerciseIndex].sets.every((set) => set.completed)
+
+      if (allSetsCompleted && exerciseIndex < exercises.length - 1) {
+        // 次のエクササイズへ移動
+        setActiveExercise(exerciseIndex + 1)
+      } else if (allSetsCompleted && exerciseIndex === exercises.length - 1) {
+        // 全エクササイズ完了
+        checkWorkoutCompletion()
+      }
+
+      // 休憩タイマー開始
+      setTimeLeft(restTime)
+      setIsTimerRunning(true)
+    } catch (error) {
+      console.error('セット記録エラー:', error)
+      Alert.alert('エラー', 'セットの記録に失敗しました')
+    }
   }
 
   const handleWeightChange = (exerciseIndex, setIndex, value) => {
@@ -92,17 +145,28 @@ export default function TrainingDetailScreen() {
     setIsTimerRunning(false)
   }
 
-  const checkWorkoutCompletion = () => {
+  const checkWorkoutCompletion = async () => {
+    if (!sessionId) return
+    
     const allCompleted = exercises.every((exercise) => exercise.sets.every((set) => set.completed))
 
     if (allCompleted) {
-      setWorkoutCompleted(true)
-      setCompleteModalVisible(true)
+      try {
+        // セッション完了
+        await workoutApi.completeTrainingSession(sessionId)
+        
+        // ステート更新
+        setWorkoutCompleted(true)
+        setCompleteModalVisible(true)
+      } catch (error) {
+        console.error('セッション完了エラー:', error)
+        Alert.alert('エラー', 'トレーニングの完了処理に失敗しました')
+      }
     }
   }
 
   const handleShare = () => {
-    // In a real app, this would open the native share dialog
+    // 実際のアプリでは共有機能を実装
     Alert.alert("シェア", "達成記録をSNSに投稿しました！")
   }
 
@@ -112,21 +176,37 @@ export default function TrainingDetailScreen() {
     return `${mins}:${secs < 10 ? "0" : ""}${secs}`
   }
 
-  const handleInfoPress = (exercise) => {
-    // Mock exercise data for the modal
-    const exerciseData = {
-      name: exercise.name,
-      description: `${exercise.name}は効果的な筋力トレーニングエクササイズです。正しいフォームで行うことで最大の効果を得られます。`,
-      tips: [
-        "呼吸を意識して行う",
-        "背筋をまっすぐに保つ",
-        "関節に負担をかけないよう注意する",
-        "フォームを優先し、無理な重量は避ける",
-      ],
-    }
+  const handleInfoPress = async (exercise) => {
+    try {
+      // 実際のアプリではAPIからエクササイズ詳細を取得
+      // const details = await workoutApi.getExerciseDetails(exercise.id);
+      
+      // 仮の詳細データ
+      const exerciseData = {
+        name: exercise.name,
+        description: `${exercise.name}は効果的な筋力トレーニングエクササイズです。正しいフォームで行うことで最大の効果を得られます。`,
+        tips: [
+          "呼吸を意識して行う",
+          "背筋をまっすぐに保つ",
+          "関節に負担をかけないよう注意する",
+          "フォームを優先し、無理な重量は避ける",
+        ],
+      }
 
-    setSelectedExercise(exerciseData)
-    setVideoModalVisible(true)
+      setSelectedExercise(exerciseData)
+      setVideoModalVisible(true)
+    } catch (error) {
+      console.error('エクササイズ詳細取得エラー:', error)
+      Alert.alert('エラー', 'エクササイズ情報の取得に失敗しました')
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    )
   }
 
   return (
@@ -286,6 +366,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     flexDirection: "row",
@@ -453,4 +538,3 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
 })
-

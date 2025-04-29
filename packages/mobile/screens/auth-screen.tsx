@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   View,
   Text,
@@ -9,20 +9,32 @@ import {
   Platform,
   ScrollView,
   SafeAreaView,
+  Alert,
+  Linking,
 } from "react-native"
 import { Input } from "../components/ui/input"
 import { Button } from "../components/ui/button"
 import { useAuth } from "../context/auth-context"
 import { useTheme } from "../context/theme-context"
 import { Mail, Lock, Apple, Facebook } from "lucide-react-native"
+import { supabase } from "../lib/supabase"
+import type { Session, User } from "@supabase/supabase-js"
 
 export default function AuthScreen() {
+  // ログインするか新規登録するか管理するためのuseState。
+  // isLoginがtrueの場合はログイン画面、falseの場合は新規登録画面を表示する。
   const [isLogin, setIsLogin] = useState(true)
+
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  
+  // 認証用コンテキスト。
   const { signIn, signUp, signInWithSocial, isLoading } = useAuth()
+
   const { colors } = useTheme()
 
+  // 認証処理を行う関数。
+  // isLoginがtrueの場合はログイン処理を行い、falseの場合は新規登録処理を行う。
   const handleAuth = async () => {
     if (isLogin) {
       await signIn(email, password)
@@ -33,6 +45,8 @@ export default function AuthScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* KeyboardAvoidingView: キーボード表示時に入力フィールドが隠れないよう自動調整するコンポーネント
+         * iOSでは"padding"、Androidでは"height"の挙動が最適なため、プラットフォームで分岐させている */}
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.logoContainer}>
@@ -65,6 +79,7 @@ export default function AuthScreen() {
               />
             </View>
 
+            {/* ログインボタン */}
             <Button
               onPress={handleAuth}
               disabled={isLoading}
@@ -73,6 +88,7 @@ export default function AuthScreen() {
               <Text style={styles.authButtonText}>{isLogin ? "ログイン" : "新規登録"}</Text>
             </Button>
 
+            {/* ログイン画面か新規登録画面を切り替えるボタン */}
             <TouchableOpacity onPress={() => setIsLogin(!isLogin)}>
               <Text style={[styles.switchText, { color: colors.primary }]}>
                 {isLogin ? "新規登録はこちら" : "ログインはこちら"}

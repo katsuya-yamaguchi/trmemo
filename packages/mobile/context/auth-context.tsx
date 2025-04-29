@@ -1,8 +1,14 @@
 import type React from "react"
+
 import { createContext, useContext, useState, useEffect } from "react"
 import { supabase } from "../lib/supabase"
-import type { Session, User } from "@supabase/supabase-js"
-import { Alert } from "react-native"
+import type { Session, User, Provider } from "@supabase/supabase-js"
+import { Alert, Linking, Platform } from "react-native"
+import {
+  GoogleSignin,
+  statusCodes,
+  User as GoogleUser,
+} from '@react-native-google-signin/google-signin'
 
 type AuthContextType = {
   user: User | null
@@ -11,30 +17,39 @@ type AuthContextType = {
   signIn: (email: string, password: string) => Promise<void>
   signUp: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
-  signInWithSocial: (provider: "apple" | "google" | "facebook") => Promise<void>
+  signInWithSocial: (provider: Provider) => Promise<void>
+  signInWithGoogle: () => Promise<void>
+  authError: string | null
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
+
+// Google Sign-In の設定 (YOUR_WEB_CLIENT_ID と YOUR_IOS_CLIENT_ID を置き換える)
+GoogleSignin.configure({
+  webClientId: '630405940634-qe28veqm4njvc0dmvo8mt65v11b0c014.apps.googleusercontent.com', // Google Cloud Console の Web クライアント ID
+  iosClientId: '630405940634-6gps154odij7lt311lhnskn0ssuciebp.apps.googleusercontent.com', // Google Cloud Console の iOS クライアント ID
+  // offlineAccess: true, // 必要に応じて
+})
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [authError, setAuthError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Check for an existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setUser(session?.user ?? null)
+    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+      setSession(initialSession)
+      setUser(initialSession?.user ?? null)
+      setIsLoading(false)
+    }).catch(err => {
+      console.error('[DEBUG] useEffect: Failed to get session', err)
       setIsLoading(false)
     })
 
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
-      setUser(session?.user ?? null)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession)
+      setUser(newSession?.user ?? null)
       setIsLoading(false)
     })
 
@@ -73,26 +88,85 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut = async () => {
     try {
-      setIsLoading(true)
-      const { error } = await supabase.auth.signOut()
-      if (error) throw error
-    } catch (error: any) {
-      Alert.alert("エラー", error.message)
+      await GoogleSignin.signOut()
+      console.log('[DEBUG] Signed out from Google.')
+    } catch (error) {
+      console.error('Error signing out from Google:', error)
     } finally {
-      setIsLoading(false)
+      const { error } = await supabase.auth.signOut()
+      if (error) {
+        console.error('Error signing out from Supabase:', error)
+        setAuthError(`Supabaseからのサインアウトエラー: ${error.message}`)
+      } else {
+        console.log('[DEBUG] Signed out from Supabase.')
+        setSession(null)
+        setUser(null)
+        setAuthError(null)
+      }
     }
   }
 
-  const signInWithSocial = async (provider: "apple" | "google" | "facebook") => {
+  const signInWithGoogle = async () => {
+    setAuthError(null)
     try {
-      setIsLoading(true)
-      // In a real app, you would implement the OAuth flow for each provider
-      // For this example, we'll just show an alert
-      Alert.alert("ソーシャルログイン", `${provider}でのログインは実装中です。`)
-      setIsLoading(false)
+      console.log('[DEBUG] Starting Google Signin process...')
+      await GoogleSignin.hasPlayServices()
+      console.log('[DEBUG] Play Services checked.')
+      const userInfo = await GoogleSignin.signIn()
+      console.log('[DEBUG] Google Signin successful, userInfo:', userInfo)
+
+      const idToken = userInfo?.data?.idToken
+
+      if (idToken) {
+        console.log('[DEBUG] Received idToken successfully.')
+        const { data, error } = await supabase.auth.signInWithIdToken({
+          provider: 'google',
+          token: idToken,
+        })
+
+        console.log('[DEBUG] Supabase signInWithIdToken response:', { data, error })
+
+        if (error) {
+          console.error('Error signing in with Supabase using ID token:', error)
+          setAuthError(`Supabaseへのサインインに失敗しました: ${error.message}`)
+          await GoogleSignin.signOut()
+          return
+        }
+        if (!data?.session) {
+          console.error('Supabase signInWithIdToken did not return a session.')
+          setAuthError('Supabaseセッションの取得に失敗しました.')
+          await GoogleSignin.signOut()
+          return
+        }
+
+        console.log('[DEBUG] Supabase session established successfully.')
+      } else {
+        console.error('Google Signin response did not contain an ID token in the expected structure.')
+        setAuthError('Googleからの応答にIDトークンが含まれていませんでした。')
+      }
     } catch (error: any) {
-      Alert.alert("エラー", error.message)
-      setIsLoading(false)
+      console.error('Google Signin error:', error)
+      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+        console.log('User cancelled the login flow')
+        setAuthError('ログインがキャンセルされました.')
+      } else if (error.code === statusCodes.IN_PROGRESS) {
+        console.log('Signin in progress')
+        setAuthError('ログイン処理が進行中です.')
+      } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        console.log('Play services not available or outdated')
+        setAuthError('Google Play開発者サービスが利用できないか、古いです.')
+      } else {
+        console.log('Some other error happened', error)
+        setAuthError(`Googleログインエラー: ${error.message || error.code || '不明なエラー'}`)
+      }
+    }
+  }
+
+  const signInWithSocial = async (provider: Provider) => {
+    if (provider === 'google') {
+      await signInWithGoogle()
+    } else {
+      console.warn(`Provider ${provider} is not configured for native sign in.`)
     }
   }
 
@@ -106,6 +180,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         signUp,
         signOut,
         signInWithSocial,
+        signInWithGoogle,
+        authError,
       }}
     >
       {children}

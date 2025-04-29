@@ -2,16 +2,18 @@
   "name": "trmemo",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "mobile": "pnpm --filter @trmemo/mobile start",
-    "backend": "pnpm --filter @trmemo/backend dev",
-    "shared:build": "pnpm --filter @trmemo/shared build",
-    "dev": "pnpm run shared:build && concurrently \"pnpm run mobile\" \"pnpm run backend\""
+    "mobile": "npm run start -w trmemo-mobile",
+    "backend": "npm run dev -w @trmemo/backend",
+    "shared:build": "npm run build -w @trmemo/shared",
+    "dev": "npm run shared:build && concurrently \"npm run mobile\" \"npm run backend\""
   },
   "devDependencies": {
     "concurrently": "^8.2.0"
   },
   "dependencies": {
-    "expo-constants": "~17.0.8"
   }
 }

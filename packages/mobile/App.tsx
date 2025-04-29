@@ -20,6 +20,7 @@ import OnboardingScreen from "./screens/onboarding-screen"
 // Context
 import { AuthProvider, useAuth } from "./context/auth-context"
 import { ThemeProvider } from "./context/theme-context"
+import React from "react"
 
 const Tab = createBottomTabNavigator()
 const Stack = createNativeStackNavigator()

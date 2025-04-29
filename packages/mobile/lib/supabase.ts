@@ -13,13 +13,13 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: AsyncStorage,
     autoRefreshToken: true,
+    // セッションを永続化する。セッション情報がストレージに保存される。
     persistSession: true,
     detectSessionInUrl: false,
   },
 })
 
-// Tells Supabase Auth to continuously refresh the session automatically
-// if the app is in the foreground
+// アプリがフォアグラウンドにある場合、Supabase Authにセッションを自動的に永続的に更新するように指示します
 AppState.addEventListener("change", (state) => {
   if (state === "active") {
     supabase.auth.startAutoRefresh()
@@ -27,4 +27,3 @@ AppState.addEventListener("change", (state) => {
     supabase.auth.stopAutoRefresh()
   }
 })
-

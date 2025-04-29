@@ -1,82 +1,60 @@
-import { useState } from "react"
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Dimensions } from "react-native"
+import { useState, useEffect } from "react"
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Dimensions, ActivityIndicator, Alert } from "react-native"
 import { useTheme } from "../context/theme-context"
+import { useAuth } from "../context/auth-context"
 import { Card } from "../components/ui/card"
 import { LineChart, BarChart } from "react-native-chart-kit"
 import { Calendar, Share2, ChevronDown, ChevronRight } from "lucide-react-native"
+import { workoutApi } from "../services/api"
 
 export default function ProgressScreen() {
   const { colors } = useTheme()
+  const { user } = useAuth()
   const [activeTab, setActiveTab] = useState("weight") // 'weight', 'strength', 'workouts'
   const [timeRange, setTimeRange] = useState("month") // 'week', 'month', 'year'
+  const [chartData, setChartData] = useState(null)
+  const [stats, setStats] = useState(null)
+  const [workoutHistory, setWorkoutHistory] = useState([])
+  const [loading, setLoading] = useState(true)
 
   const screenWidth = Dimensions.get("window").width - 40
 
-  // Mock data for charts
-  const weightData = {
-    labels: ["1月", "2月", "3月", "4月", "5月", "6月"],
-    datasets: [
-      {
-        data: [70, 69, 68, 67, 66, 65],
-        color: () => colors.primary,
-        strokeWidth: 2,
-      },
-    ],
-  }
+  // 進捗データを取得
+  useEffect(() => {
+    async function fetchProgressData() {
+      if (!user?.id) return
+      
+      try {
+        setLoading(true)
+        const response = await workoutApi.getProgressData(user.id, activeTab, timeRange)
+        setChartData(response.chartData)
+        setStats(response.stats)
+      } catch (error) {
+        console.error("進捗データ取得エラー:", error)
+        Alert.alert("エラー", "進捗データの取得に失敗しました")
+      } finally {
+        setLoading(false)
+      }
+    }
 
-  const strengthData = {
-    labels: ["ベンチ", "スクワット", "デッド"],
-    datasets: [
-      {
-        data: [80, 120, 140],
-        color: () => colors.primary,
-      },
-    ],
-  }
+    fetchProgressData()
+  }, [user, activeTab, timeRange])
 
-  const workoutsData = {
-    labels: ["月", "火", "水", "木", "金", "土", "日"],
-    datasets: [
-      {
-        data: [1, 0, 1, 0, 1, 1, 0],
-        color: () => colors.primary,
-      },
-    ],
-  }
+  // ワークアウト履歴を取得
+  useEffect(() => {
+    async function fetchWorkoutHistory() {
+      if (!user?.id) return
+      
+      try {
+        const history = await workoutApi.getWorkoutHistory(user.id, 5, 0)
+        setWorkoutHistory(history)
+      } catch (error) {
+        console.error("ワークアウト履歴取得エラー:", error)
+      }
+    }
 
-  // Mock data for workout history
-  const workoutHistory = [
-    {
-      date: "2023/10/15",
-      title: "胸・腕トレーニング",
-      highlights: "ベンチプレス 80kg × 8回",
-      exercises: 5,
-    },
-    {
-      date: "2023/10/13",
-      title: "背中・肩トレーニング",
-      highlights: "デッドリフト 140kg × 6回",
-      exercises: 6,
-    },
-    {
-      date: "2023/10/11",
-      title: "脚トレーニング",
-      highlights: "スクワット 120kg × 8回",
-      exercises: 4,
-    },
-    {
-      date: "2023/10/09",
-      title: "胸・腕トレーニング",
-      highlights: "ベンチプレス 77.5kg × 8回",
-      exercises: 5,
-    },
-    {
-      date: "2023/10/07",
-      title: "背中・肩トレーニング",
-      highlights: "デッドリフト 135kg × 6回",
-      exercises: 6,
-    },
-  ]
+    fetchWorkoutHistory()
+  }, [user])
 
   const chartConfig = {
     backgroundGradientFrom: colors.card,
@@ -95,22 +73,27 @@ export default function ProgressScreen() {
   }
 
   const renderChart = () => {
+    if (!chartData || !chartData.labels || !chartData.datasets) {
+      return <Text style={[styles.noDataText, { color: colors.text }]}>データがありません</Text>
+    }
+
     switch (activeTab) {
       case "weight":
         return (
           <LineChart
-            data={weightData}
+            data={chartData}
             width={screenWidth}
             height={220}
             chartConfig={chartConfig}
             bezier
             style={styles.chart}
+            yAxisSuffix="kg"
           />
         )
       case "strength":
         return (
           <BarChart
-            data={strengthData}
+            data={chartData}
             width={screenWidth}
             height={220}
             chartConfig={chartConfig}
@@ -121,7 +104,7 @@ export default function ProgressScreen() {
       case "workouts":
         return (
           <BarChart
-            data={workoutsData}
+            data={chartData}
             width={screenWidth}
             height={220}
             chartConfig={chartConfig}
@@ -134,9 +117,32 @@ export default function ProgressScreen() {
     }
   }
 
+  const handleTimeRangeChange = () => {
+    // モーダルや選択UIを表示して期間を選択
+    Alert.alert(
+      "期間選択",
+      "表示する期間を選択してください",
+      [
+        { text: "1週間", onPress: () => setTimeRange("week") },
+        { text: "1ヶ月", onPress: () => setTimeRange("month") },
+        { text: "1年", onPress: () => setTimeRange("year") },
+        { text: "キャンセル", style: "cancel" }
+      ]
+    )
+  }
+
   const handleShare = () => {
-    // In a real app, this would open the native share dialog
-    alert("進捗をシェアしました！")
+    // 実際のアプリでは共有機能を実装
+    Alert.alert("シェア", "進捗をシェアしました！")
+  }
+
+  // ローディング表示
+  if (loading && !chartData) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    )
   }
 
   return (
@@ -150,7 +156,10 @@ export default function ProgressScreen() {
         </View>
 
         <View style={styles.filterContainer}>
-          <TouchableOpacity style={[styles.filterButton, { borderColor: colors.border }]}>
+          <TouchableOpacity 
+            style={[styles.filterButton, { borderColor: colors.border }]}
+            onPress={handleTimeRangeChange}
+          >
             <Text style={[styles.filterText, { color: colors.text }]}>
               期間: {timeRange === "week" ? "1週間" : timeRange === "month" ? "1ヶ月" : "1年"}
             </Text>
@@ -187,24 +196,37 @@ export default function ProgressScreen() {
           </Text>
           {renderChart()}
 
-          {activeTab === "weight" && (
+          {stats && activeTab === "weight" && (
             <View style={styles.highlightContainer}>
               <Text style={[styles.highlightLabel, { color: colors.text }]}>先月比:</Text>
-              <Text style={[styles.highlightValue, { color: colors.success }]}>-1kg</Text>
+              <Text 
+                style={[
+                  styles.highlightValue, 
+                  { color: stats.change < 0 ? colors.success : colors.error }
+                ]}
+              >
+                {stats.change > 0 ? '+' : ''}{stats.change}kg
+              </Text>
             </View>
           )}
 
-          {activeTab === "strength" && (
+          {stats && activeTab === "strength" && stats.maxWeights && (
             <View style={styles.highlightContainer}>
-              <Text style={[styles.highlightLabel, { color: colors.text }]}>ベンチプレス自己ベスト:</Text>
-              <Text style={[styles.highlightValue, { color: colors.primary }]}>80kg</Text>
+              <Text style={[styles.highlightLabel, { color: colors.text }]}>
+                {stats.maxWeights[0]?.name || 'ベンチプレス'}自己ベスト:
+              </Text>
+              <Text style={[styles.highlightValue, { color: colors.primary }]}>
+                {stats.maxWeights[0]?.weight || 0}kg
+              </Text>
             </View>
           )}
 
-          {activeTab === "workouts" && (
+          {stats && activeTab === "workouts" && (
             <View style={styles.highlightContainer}>
               <Text style={[styles.highlightLabel, { color: colors.text }]}>今週のトレーニング:</Text>
-              <Text style={[styles.highlightValue, { color: colors.primary }]}>4/5回</Text>
+              <Text style={[styles.highlightValue, { color: colors.primary }]}>
+                {stats.total}/{stats.target}回
+              </Text>
             </View>
           )}
         </Card>
@@ -212,35 +234,43 @@ export default function ProgressScreen() {
         <View style={styles.historySection}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>トレーニング履歴</Text>
 
-          {workoutHistory.map((workout, index) => (
-            <Card
-              key={index}
-              style={[styles.historyCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-            >
-              <View style={styles.historyHeader}>
-                <View style={styles.dateContainer}>
-                  <Calendar size={16} color={colors.primary} />
-                  <Text style={[styles.dateText, { color: colors.text }]}>{workout.date}</Text>
+          {workoutHistory.length > 0 ? (
+            workoutHistory.map((workout, index) => (
+              <Card
+                key={index}
+                style={[styles.historyCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+              >
+                <View style={styles.historyHeader}>
+                  <View style={styles.dateContainer}>
+                    <Calendar size={16} color={colors.primary} />
+                    <Text style={[styles.dateText, { color: colors.text }]}>{workout.date}</Text>
+                  </View>
+                  <TouchableOpacity style={styles.detailButton}>
+                    <Text style={[styles.detailText, { color: colors.primary }]}>詳細</Text>
+                    <ChevronRight size={16} color={colors.primary} />
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity style={styles.detailButton}>
-                  <Text style={[styles.detailText, { color: colors.primary }]}>詳細</Text>
-                  <ChevronRight size={16} color={colors.primary} />
-                </TouchableOpacity>
-              </View>
 
-              <Text style={[styles.workoutTitle, { color: colors.text }]}>{workout.title}</Text>
+                <Text style={[styles.workoutTitle, { color: colors.text }]}>{workout.title}</Text>
 
-              <View style={styles.workoutDetails}>
-                <Text style={[styles.highlightText, { color: colors.text }]}>{workout.highlights}</Text>
-                <Text style={[styles.exerciseCount, { color: colors.text }]}>{workout.exercises}種目</Text>
-              </View>
-            </Card>
-          ))}
+                <View style={styles.workoutDetails}>
+                  <Text style={[styles.highlightText, { color: colors.text }]}>{workout.highlights}</Text>
+                  <Text style={[styles.exerciseCount, { color: colors.text }]}>{workout.exercises}種目</Text>
+                </View>
+              </Card>
+            ))
+          ) : (
+            <Text style={[styles.noDataText, { color: colors.text }]}>
+              トレーニング履歴がありません
+            </Text>
+          )}
 
-          <TouchableOpacity style={[styles.viewAllButton, { borderColor: colors.border }]}>
-            <Text style={[styles.viewAllText, { color: colors.primary }]}>すべての履歴を見る</Text>
-            <ChevronRight size={16} color={colors.primary} />
-          </TouchableOpacity>
+          {workoutHistory.length > 0 && (
+            <TouchableOpacity style={[styles.viewAllButton, { borderColor: colors.border }]}>
+              <Text style={[styles.viewAllText, { color: colors.primary }]}>すべての履歴を見る</Text>
+              <ChevronRight size={16} color={colors.primary} />
+            </TouchableOpacity>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -251,6 +281,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     flexDirection: "row",
@@ -397,5 +432,10 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginRight: 5,
   },
+  noDataText: {
+    textAlign: 'center',
+    fontSize: 16,
+    marginVertical: 20,
+    opacity: 0.7,
+  },
 })
-

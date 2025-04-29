@@ -13,7 +13,7 @@
     "express": "^4.18.2",
     "dotenv": "^16.4.5",
     "@supabase/supabase-js": "^2.39.8",
-    "@trmemo/shared": "workspace:*"
+    "@trmemo/shared": "^1.0.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.13",
