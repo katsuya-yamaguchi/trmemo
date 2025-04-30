@@ -7,6 +7,6 @@ const router = express.Router();
 const homeController = new HomeController();
 
 // ホーム画面データの取得
-router.get('/home', authenticateToken, homeController.getHomeScreenData);
+router.get('/', authenticateToken, homeController.getHomeScreenData);
 
 export default router;
