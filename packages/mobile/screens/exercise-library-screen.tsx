@@ -1,18 +1,35 @@
-import { useState } from "react"
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, SafeAreaView } from "react-native"
+import { useState, useEffect } from "react"
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, SafeAreaView, ActivityIndicator, Alert } from "react-native"
 import { useTheme } from "../context/theme-context"
 import { Card } from "../components/ui/card"
 import ExerciseVideoModal from "../components/exercise-video-modal"
 import { ChevronLeft, Search, Filter, ChevronRight, Dumbbell, Heart, Zap } from "lucide-react-native"
+import { workoutApi } from "../services/api"
+
+// モバイルアプリ側で表示するエクササイズの型定義 (APIレスポンスに合わせる)
+// バックエンドのフォーマット済みデータに対応
+type Exercise = {
+  id: string; // UUID は string
+  name: string;
+  category: string; // 'chest', 'back', etc.
+  difficulty: string; // '初級', '中級', '上級' (現状ダミー)
+  description: string;
+  tips: string[]; // (現状ダミー)
+};
 
 export default function ExerciseLibraryScreen({ navigation }) {
   const { colors } = useTheme()
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [modalVisible, setModalVisible] = useState(false)
-  const [selectedExercise, setSelectedExercise] = useState(null)
+  const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null)
 
-  // Mock data for exercise categories
+  // --- State の追加 ---
+  const [exercises, setExercises] = useState<Exercise[]>([]) // APIから取得したデータ用
+  const [loading, setLoading] = useState(true) // ローディング状態
+  const [error, setError] = useState<string | null>(null) // エラー状態
+
+  // トレーニング部位。部位は今後増えることも無いため、ハードコーディングでも現状問題ない
   const categories = [
     { id: "all", name: "すべて" },
     { id: "chest", name: "胸" },
@@ -23,73 +40,42 @@ export default function ExerciseLibraryScreen({ navigation }) {
     { id: "abs", name: "腹筋" },
   ]
 
-  // Mock data for exercises
-  const exercises = [
-    {
-      id: 1,
-      name: "ベンチプレス",
-      category: "chest",
-      difficulty: "中級",
-      description: "ベンチプレスは胸の筋肉を鍛える基本的なエクササイズです。バーベルを使用して行います。",
-      tips: ["肩甲骨を寄せて胸を張る", "バーを下ろす際は胸の中央に向ける", "呼吸を意識し、押し上げる時に息を吐く"],
-    },
-    {
-      id: 2,
-      name: "スクワット",
-      category: "legs",
-      difficulty: "中級",
-      description:
-        "スクワットは下半身全体を鍛える基本的なエクササイズです。特に大腿四頭筋、ハムストリングス、臀筋に効果的です。",
-      tips: [
-        "足は肩幅より少し広めに開く",
-        "膝がつま先より前に出ないようにする",
-        "背筋をまっすぐに保つ",
-        "腰を落とす際は太ももが床と平行になるまで下げる",
-      ],
-    },
-    {
-      id: 3,
-      name: "デッドリフト",
-      category: "back",
-      difficulty: "上級",
-      description: "デッドリフトは背中、臀筋、ハムストリングスを鍛える複合エクササイズです。正しいフォームが重要です。",
-      tips: [
-        "足は肩幅に開く",
-        "背筋をまっすぐに保つ",
-        "バーは常に身体の近くをキープする",
-        "持ち上げる際は足で床を押すイメージで",
-      ],
-    },
-    {
-      id: 4,
-      name: "ラットプルダウン",
-      category: "back",
-      difficulty: "初級",
-      description: "ラットプルダウンは広背筋を中心に背中の筋肉を鍛えるエクササイズです。マシンを使用して行います。",
-      tips: ["肩甲骨を寄せながらバーを引き下げる", "背筋をまっすぐに保つ", "腕ではなく背中の筋肉を使うイメージで引く"],
-    },
-    {
-      id: 5,
-      name: "ショルダープレス",
-      category: "shoulders",
-      difficulty: "中級",
-      description: "ショルダープレスは三角筋を中心に肩の筋肉を鍛えるエクササイズです。ダンベルやバーベルを使用します。",
-      tips: ["肘を90度に曲げた状態からスタート", "腕を伸ばし切らないようにする", "背筋をまっすぐに保つ"],
-    },
-  ]
+  // --- useEffect でデータを取得 ---
+  useEffect(() => {
+    const fetchExercises = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        // API を呼び出し (カテゴリや検索クエリも渡せるようにする - 後述)
+        // 現状はフィルタリングをフロントで行うため、まず全件取得
+        const data = await workoutApi.getExerciseLibrary()
+        setExercises(data) // 取得したデータを state にセット
+      } catch (err: any) {
+        console.error("Failed to fetch exercises:", err)
+        setError(err.message || "エクササイズの取得に失敗しました")
+        Alert.alert("エラー", err.message || "エクササイズの取得に失敗しました")
+      } finally {
+        setLoading(false)
+      }
+    }
 
+    fetchExercises()
+  }, []) // 初回マウント時のみ実行
+
+  // --- フィルタリングロジックで使用する state を `exercises` に変更 ---
   const filteredExercises = exercises.filter((exercise) => {
+    // カテゴリのマッチング (バックエンドから返される category ID を使用)
     const matchesCategory = selectedCategory === "all" || exercise.category === selectedCategory
     const matchesSearch = exercise.name.toLowerCase().includes(searchQuery.toLowerCase())
     return matchesCategory && matchesSearch
   })
 
-  const handleExercisePress = (exercise) => {
+  const handleExercisePress = (exercise: Exercise) => {
     setSelectedExercise(exercise)
     setModalVisible(true)
   }
 
-  const getDifficultyColor = (difficulty) => {
+  const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {
       case "初級":
         return "#10b981" // green
@@ -102,7 +88,7 @@ export default function ExerciseLibraryScreen({ navigation }) {
     }
   }
 
-  const getCategoryIcon = (category) => {
+  const getCategoryIcon = (category: string) => {
     switch (category) {
       case "chest":
         return <Dumbbell size={16} color={colors.primary} />
@@ -120,6 +106,25 @@ export default function ExerciseLibraryScreen({ navigation }) {
         return <Dumbbell size={16} color={colors.primary} />
     }
   }
+
+  // --- ローディングとエラー表示の追加 ---
+  if (loading) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </SafeAreaView>
+    )
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ color: colors.destructive, marginBottom: 10 }}>エラー: {error}</Text>
+        {/* 必要であればリトライボタンなどを追加 */}
+      </SafeAreaView>
+    )
+  }
+  // --- ここまでローディングとエラー表示 ---
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
@@ -172,37 +177,43 @@ export default function ExerciseLibraryScreen({ navigation }) {
         </ScrollView>
 
         <View style={styles.exercisesContainer}>
-          {filteredExercises.map((exercise) => (
-            <TouchableOpacity key={exercise.id} onPress={() => handleExercisePress(exercise)}>
-              <Card style={[styles.exerciseCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <View style={styles.exerciseHeader}>
-                  <View style={styles.exerciseInfo}>
-                    {getCategoryIcon(exercise.category)}
-                    <Text style={[styles.exerciseName, { color: colors.text }]}>{exercise.name}</Text>
+          {filteredExercises.length > 0 ? (
+            filteredExercises.map((exercise) => (
+              <TouchableOpacity key={exercise.id} onPress={() => handleExercisePress(exercise)}>
+                <Card style={[styles.exerciseCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <View style={styles.exerciseHeader}>
+                    <View style={styles.exerciseInfo}>
+                      {getCategoryIcon(exercise.category)}
+                      <Text style={[styles.exerciseName, { color: colors.text }]}>{exercise.name}</Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.difficultyBadge,
+                        { backgroundColor: getDifficultyColor(exercise.difficulty) + "20" },
+                      ]}
+                    >
+                      <Text style={[styles.difficultyText, { color: getDifficultyColor(exercise.difficulty) }]}>
+                        {exercise.difficulty}
+                      </Text>
+                    </View>
                   </View>
-                  <View
-                    style={[
-                      styles.difficultyBadge,
-                      { backgroundColor: getDifficultyColor(exercise.difficulty) + "20" },
-                    ]}
-                  >
-                    <Text style={[styles.difficultyText, { color: getDifficultyColor(exercise.difficulty) }]}>
-                      {exercise.difficulty}
-                    </Text>
+
+                  <Text style={[styles.exerciseDescription, { color: colors.text }]} numberOfLines={2}>
+                    {exercise.description}
+                  </Text>
+
+                  <View style={styles.exerciseFooter}>
+                    <Text style={[styles.viewDetailsText, { color: colors.primary }]}>詳細を見る</Text>
+                    <ChevronRight size={16} color={colors.primary} />
                   </View>
-                </View>
-
-                <Text style={[styles.exerciseDescription, { color: colors.text }]} numberOfLines={2}>
-                  {exercise.description}
-                </Text>
-
-                <View style={styles.exerciseFooter}>
-                  <Text style={[styles.viewDetailsText, { color: colors.primary }]}>詳細を見る</Text>
-                  <ChevronRight size={16} color={colors.primary} />
-                </View>
-              </Card>
-            </TouchableOpacity>
-          ))}
+                </Card>
+              </TouchableOpacity>
+            ))
+          ) : (
+            <View style={styles.noDataContainer}>
+              <Text style={[styles.noDataText, { color: colors.text }]}>該当するエクササイズが見つかりません。</Text>
+            </View>
+          )}
         </View>
       </ScrollView>
 
@@ -329,6 +340,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "500",
     marginRight: 5,
+  },
+  noDataContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 50,
+  },
+  noDataText: {
+    fontSize: 16,
+    opacity: 0.7,
   },
 })
 
