@@ -262,57 +262,84 @@ export const recordExerciseSet = async (req: Request, res: Response) => {
 // エクササイズライブラリを取得
 export const getExerciseLibrary = async (req: Request, res: Response) => {
   try {
-    const category = req.query.category as string;
-    const search = req.query.search as string;
+    const { category, search } = req.query;
 
     let query = supabase
       .from('exercises')
       .select('*');
 
-    // カテゴリーでフィルタリング
-    if (category && category !== 'all') {
-      query = query.eq('muscle_group', category);
+    // カテゴリによるフィルタリング
+    if (category && typeof category === 'string' && category !== 'all') {
+      let dbCategory = category;
+      if (category === 'chest') dbCategory = '胸';
+      if (category === 'back') dbCategory = '背中';
+      if (category === 'legs') dbCategory = '脚';
+      if (category === 'shoulders') dbCategory = '肩';
+
+      query = query.ilike('muscle_group', `%${dbCategory}%`);
     }
 
-    // 検索語でフィルタリング
-    if (search) {
+    // 検索クエリによるフィルタリング (name カラム)
+    if (search && typeof search === 'string') {
       query = query.ilike('name', `%${search}%`);
     }
 
     const { data, error } = await query;
 
     if (error) {
-      return res.status(400).json({ message: 'エクササイズの取得に失敗しました', error });
+      console.error('Error fetching exercise library:', error);
+      return res.status(500).json({ message: 'エクササイズの取得に失敗しました', error: error.message });
     }
 
-    // カテゴリーの一覧を取得
-    const { data: categories } = await supabase
-      .from('exercises')
-      .select('muscle_group')
-      .order('muscle_group');
+    // モバイルアプリが期待する形式に整形 (difficulty と tips はダミー)
+    const formattedExercises = data.map(ex => ({
+      id: ex.id,
+      name: ex.name,
+      category: mapMuscleGroupToCategory(ex.muscle_group),
+      difficulty: assignDummyDifficulty(ex.name),
+      description: ex.description || '説明はありません。',
+      tips: assignDummyTips(ex.name),
+    }));
 
-    // 重複を除去
-    const uniqueCategories = categories
-      ? [...new Set(categories.map(item => item.muscle_group))]
-        .filter(Boolean)
-        .map(category => ({
-          id: category,
-          name: categoryNameMap[category] || category
-        }))
-      : [];
+    return res.status(200).json(formattedExercises);
 
-    // 「すべて」を先頭に追加
-    uniqueCategories.unshift({ id: 'all', name: 'すべて' });
-
-    res.json({
-      exercises: data,
-      categories: uniqueCategories
-    });
   } catch (error) {
-    console.error('エクササイズライブラリエラー:', error);
-    res.status(500).json({ message: 'サーバーエラー' });
+    console.error('Unexpected error in getExerciseLibrary:', error);
+    return res.status(500).json({ message: 'サーバーエラーが発生しました' });
   }
 };
+
+// ヘルパー関数: DBの部位名をモバイルカテゴリに変換 (例)
+// DBスキーマや要件に合わせて調整が必要
+function mapMuscleGroupToCategory(muscleGroup: string | null): string {
+  if (!muscleGroup) return 'other';
+
+  const lowerMuscleGroup = muscleGroup.toLowerCase();
+
+  if (lowerMuscleGroup.includes('胸')) return 'chest';
+  if (lowerMuscleGroup.includes('背中')) return 'back';
+  if (lowerMuscleGroup.includes('脚') || lowerMuscleGroup.includes('尻')) return 'legs';
+  if (lowerMuscleGroup.includes('肩')) return 'shoulders';
+  if (lowerMuscleGroup.includes('腕') || lowerMuscleGroup.includes('三頭') || lowerMuscleGroup.includes('二頭')) return 'arms';
+  if (lowerMuscleGroup.includes('腹')) return 'abs';
+
+  return 'other';
+}
+
+// ヘルパー関数: ダミーの難易度を割り当て (例)
+function assignDummyDifficulty(exerciseName: string): string {
+  if (exerciseName.includes('デッドリフト') || exerciseName.includes('スクワット')) return '上級';
+  if (exerciseName.includes('プレス') || exerciseName.includes('懸垂')) return '中級';
+  return '初級';
+}
+
+// ヘルパー関数: ダミーのヒントを割り当て (例)
+function assignDummyTips(exerciseName: string): string[] {
+  if (exerciseName === 'ベンチプレス') return ["肩甲骨を寄せて胸を張る", "バーを下ろす際は胸の中央に向ける", "呼吸を意識し、押し上げる時に息を吐く"];
+  if (exerciseName === 'スクワット') return ["足は肩幅より少し広めに開く", "膝がつま先より前に出ないようにする", "背筋をまっすぐに保つ"];
+  if (exerciseName === 'デッドリフト') return ["背筋をまっすぐに保つ", "バーは常に身体の近くをキープする"];
+  return ["正しいフォームを意識しましょう。", "無理のない重量設定で行いましょう。"];
+}
 
 // カテゴリーIDから日本語名へのマッピング
 const categoryNameMap = {
