@@ -31,6 +31,8 @@ router.get('/exercises/:exerciseId', getExerciseDetails);
 
 // 進捗データ関連
 router.get('/progress', authenticateToken, getProgressData);
-router.get('/history', authenticateToken, getWorkoutHistory);
+
+// トレーニング履歴取得 (認証必要)
+router.get('/history', authenticateToken, getWorkoutHistory); // 認証ミドルウェアを追加
 
 export default router;

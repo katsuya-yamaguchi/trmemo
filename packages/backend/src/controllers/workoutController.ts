@@ -2,52 +2,89 @@
 import { Request, Response } from 'express';
 import supabase from '../config/database';
 import { UserTrainingPlan, UserTrainingDay, UserDayExercise, Exercise } from '../models/workoutModel';
+import { subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, format, eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval } from 'date-fns'; // date-fns をインストールする必要があるかも (npm install date-fns)
 
 // ユーザーのトレーニングプランを取得
 export const getUserTrainingPlan = async (req: Request, res: Response) => {
   try {
-    // 認証トークンからユーザーIDを取得する代わりに、クエリパラメータから取得
-    // 本番環境では適切な認証が必要
-    const userId = req.query.userId as string;
-
+    // 認証ミドルウェアからユーザーIDを取得
+    const userId = req.user?.id;
     if (!userId) {
-      return res.status(400).json({ message: 'ユーザーIDが必要です' });
+      return res.status(401).json({ message: '認証されていません' });
     }
 
-    const { data: plan, error: planError } = await supabase
+    // 1. ユーザーの最新（またはアクティブな）トレーニングプランを取得
+    //   単純化のため、ここではユーザーに紐づく最初のプランを取得する例
+    const { data: userPlan, error: planError } = await supabase
       .from('user_training_plans')
       .select('*')
       .eq('user_id', userId)
-      .single();
+      // .order('created_at', { ascending: false }) // 必要なら最新のプランを取得
+      .limit(1)
+      .maybeSingle(); // プランがなくてもエラーにしない
 
     if (planError) {
-      return res.status(404).json({ message: 'トレーニングプランが見つかりません', error: planError });
+      console.error('Error fetching user training plan:', planError);
+      return res.status(500).json({ message: 'トレーニングプランの取得に失敗しました', error: planError.message });
     }
 
-    // トレーニング日を取得
-    const { data: days, error: daysError } = await supabase
+    // プランが見つからない場合
+    if (!userPlan) {
+      return res.status(404).json({ message: '有効なトレーニングプランが見つかりません' });
+    }
+
+    // 2. プランに紐づくトレーニング日と、各日のエクササイズを取得
+    //    ネストされたSELECTを使用
+    const { data: trainingDaysWithExercises, error: daysError } = await supabase
       .from('user_training_days')
       .select(`
-        *,
+        id,
+        day_number,
+        title,
+        estimated_duration,
         user_day_exercises (
-          *,
-          exercise: exercises (*)
+          set_count,
+          rep_min,
+          rep_max,
+          exercise: exercises ( id, name ) 
         )
       `)
-      .eq('user_training_plan_id', plan.id)
-      .order('day_number');
+      .eq('user_training_plan_id', userPlan.id)
+      .order('day_number', { ascending: true }); // 曜日順にソート
 
     if (daysError) {
-      return res.status(404).json({ message: 'トレーニング日の取得に失敗しました', error: daysError });
+      console.error('Error fetching training days and exercises:', daysError);
+      return res.status(500).json({ message: 'トレーニング日の取得に失敗しました', error: daysError.message });
     }
 
-    res.json({
-      plan,
-      days
-    });
+    // 3. モバイルアプリが期待する形式に整形
+    const formattedTrainingDays = trainingDaysWithExercises.map(day => ({
+      id: day.id,
+      day_number: day.day_number,
+      title: day.title,
+      estimated_duration: day.estimated_duration,
+      // user_day_exercises を整形
+      exercises: day.user_day_exercises.map((ex: any) => ({ // any は一時的。必要なら型定義
+        id: ex.exercise.id,
+        name: ex.exercise.name,
+        sets: ex.set_count,
+        reps: `${ex.rep_min}-${ex.rep_max}` // rep_min と rep_max を結合
+      }))
+    }));
+
+    // 最終的なレスポンスデータ
+    const responseData = {
+      id: userPlan.id,
+      name: userPlan.name,
+      startDate: userPlan.start_date, // start_date カラムが存在する場合
+      trainingDays: formattedTrainingDays
+    };
+
+    return res.status(200).json(responseData);
+
   } catch (error) {
-    console.error('エラー:', error);
-    res.status(500).json({ message: 'サーバーエラー' });
+    console.error('Unexpected error in getUserTrainingPlan:', error);
+    return res.status(500).json({ message: 'サーバーエラーが発生しました' });
   }
 };
 
@@ -384,366 +421,396 @@ export const getExerciseDetails = async (req: Request, res: Response) => {
   }
 };
 
-// プログレスデータを取得
-export const getProgressData = async (req: Request, res: Response) => {
-  try {
-    const userId = req.query.userId as string;
-    const dataType = req.query.dataType as string || 'weight'; // 'weight', 'strength', 'workouts'
-    const period = req.query.period as string || 'month'; // 'week', 'month', 'year'
-
-    if (!userId) {
-      return res.status(400).json({ message: 'ユーザーIDが必要です' });
-    }
-
-    let chartData = null;
-    let stats = null;
-
-    if (dataType === 'weight') {
-      // 体重データを取得
-      const response = await getWeightProgressData(userId, period);
-      chartData = response.chartData;
-      stats = response.stats;
-    } else if (dataType === 'strength') {
-      // 筋力データを取得
-      const response = await getStrengthProgressData(userId, period);
-      chartData = response.chartData;
-      stats = response.stats;
-    } else if (dataType === 'workouts') {
-      // トレーニング頻度データを取得
-      const response = await getWorkoutFrequencyData(userId, period);
-      chartData = response.chartData;
-      stats = response.stats;
-    }
-
-    res.json({
-      chartData,
-      stats
-    });
-  } catch (error) {
-    console.error('プログレスデータ取得エラー:', error);
-    res.status(500).json({ message: 'サーバーエラー' });
-  }
-};
-
-// 体重の推移データを取得
-const getWeightProgressData = async (userId: string, period: string) => {
-  // 期間に基づいて日付範囲を計算
-  const endDate = new Date();
-  const startDate = new Date();
-  
-  if (period === 'week') {
-    startDate.setDate(endDate.getDate() - 7);
-  } else if (period === 'month') {
-    startDate.setMonth(endDate.getMonth() - 1);
-  } else if (period === 'year') {
-    startDate.setFullYear(endDate.getFullYear() - 1);
-  }
-
-  // 体重履歴を取得
-  const { data } = await supabase
-    .from('user_body_stats')
-    .select('*')
-    .eq('user_id', userId)
-    .gte('recorded_date', startDate.toISOString())
-    .lte('recorded_date', endDate.toISOString())
-    .order('recorded_date');
-
-  // 最新の体重と開始時の体重を計算
-  let currentWeight = null;
-  let startWeight = null;
-  let weightChange = null;
-
-  if (data && data.length > 0) {
-    currentWeight = data[data.length - 1].weight;
-    startWeight = data[0].weight;
-    weightChange = currentWeight - startWeight;
-  }
-
-  // チャート用にデータを整形
-  const chartData = formatChartData(data, 'weight', period);
-
-  return {
-    chartData,
-    stats: {
-      current: currentWeight,
-      start: startWeight,
-      change: weightChange
-    }
-  };
-};
-
-// 筋力データの推移を取得
-const getStrengthProgressData = async (userId: string, period: string) => {
-  // 期間に基づいて日付範囲を計算
-  const endDate = new Date();
-  const startDate = new Date();
-  
-  if (period === 'week') {
-    startDate.setDate(endDate.getDate() - 7);
-  } else if (period === 'month') {
-    startDate.setMonth(endDate.getMonth() - 1);
-  } else if (period === 'year') {
-    startDate.setFullYear(endDate.getFullYear() - 1);
-  }
-
-  // 主要エクササイズの最大重量を取得
-  const exercises = ['ベンチプレス', 'スクワット', 'デッドリフト'];
-  let maxWeights = [];
-
-  for (const exerciseName of exercises) {
-    const { data } = await supabase
-      .from('session_exercises')
-      .select(`
-        *,
-        session: sessions (
-          start_time,
-          user_id
-        )
-      `)
-      .eq('exercise_name', exerciseName)
-      .eq('session.user_id', userId)
-      .gte('session.start_time', startDate.toISOString())
-      .lte('session.start_time', endDate.toISOString())
-      .order('weight', { ascending: false })
-      .limit(1);
-
-    if (data && data.length > 0) {
-      maxWeights.push({
-        name: exerciseName,
-        weight: data[0].weight
-      });
-    }
-  }
-
-  // チャート用データを作成
-  const chartData = {
-    labels: maxWeights.map(item => item.name),
-    datasets: [
-      {
-        data: maxWeights.map(item => item.weight)
-      }
-    ]
-  };
-
-  return {
-    chartData,
-    stats: {
-      maxWeights
-    }
-  };
-};
-
-// トレーニング頻度データを取得
-const getWorkoutFrequencyData = async (userId: string, period: string) => {
-  // 期間に基づいて日付範囲を計算
-  const endDate = new Date();
-  const startDate = new Date();
-  
-  if (period === 'week') {
-    startDate.setDate(endDate.getDate() - 7);
-  } else if (period === 'month') {
-    startDate.setDate(endDate.getDate() - 30);
-  } else if (period === 'year') {
-    startDate.setMonth(endDate.getMonth() - 12);
-  }
-
-  // セッションデータを取得
-  const { data: sessions } = await supabase
-    .from('sessions')
-    .select('*')
-    .eq('user_id', userId)
-    .gte('start_time', startDate.toISOString())
-    .lte('start_time', endDate.toISOString())
-    .order('start_time');
-
-  let labels = [];
-  let values = [];
-
-  if (period === 'week') {
-    // 週の場合は曜日ごとにカウント
-    const daysOfWeek = ['日', '月', '火', '水', '木', '金', '土'];
-    const daysCounts = Array(7).fill(0);
-    
-    sessions?.forEach(session => {
-      const date = new Date(session.start_time);
-      const dayIndex = date.getDay();
-      daysCounts[dayIndex]++;
-    });
-    
-    labels = daysOfWeek;
-    values = daysCounts;
-  } else if (period === 'month') {
-    // 月の場合は週ごとにカウント
-    const weeksCounts = Array(4).fill(0);
-    
-    sessions?.forEach(session => {
-      const date = new Date(session.start_time);
-      const dayOfMonth = date.getDate();
-      const weekIndex = Math.floor(dayOfMonth / 7);
-      weeksCounts[Math.min(weekIndex, 3)]++;
-    });
-    
-    labels = ['第1週', '第2週', '第3週', '第4週'];
-    values = weeksCounts;
-  } else {
-    // 年の場合は月ごとにカウント
-    const monthsCounts = Array(12).fill(0);
-    
-    sessions?.forEach(session => {
-      const date = new Date(session.start_time);
-      const monthIndex = date.getMonth();
-      monthsCounts[monthIndex]++;
-    });
-    
-    labels = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
-    values = monthsCounts;
-  }
-
-  // チャート用データを作成
-  const chartData = {
-    labels,
-    datasets: [
-      {
-        data: values
-      }
-    ]
-  };
-
-  // 統計データ
-  const totalWorkouts = sessions?.length || 0;
-  const targetWorkouts = period === 'week' ? 5 : period === 'month' ? 20 : 240;
-  const completionRate = totalWorkouts / targetWorkouts;
-
-  return {
-    chartData,
-    stats: {
-      total: totalWorkouts,
-      target: targetWorkouts,
-      completionRate
-    }
-  };
-};
-
-// チャート用データを整形
-const formatChartData = (data, dataType, period) => {
-  if (!data || data.length === 0) {
-    return { labels: [], datasets: [{ data: [] }] };
-  }
-
-  const formatDate = (date) => {
-    if (period === 'week') {
-      return date.toLocaleDateString('ja-JP', { weekday: 'short' });
-    } else if (period === 'month') {
-      return `${date.getMonth() + 1}/${date.getDate()}`;
-    } else {
-      return `${date.getMonth() + 1}月`;
-    }
-  };
-
-  // 日付でグループ化
-  const groupedData = {};
-  
-  data.forEach(item => {
-    const date = new Date(item.recorded_date);
-    const dateKey = formatDate(date);
-    
-    if (!groupedData[dateKey]) {
-      groupedData[dateKey] = [];
-    }
-    
-    groupedData[dateKey].push(item);
-  });
-
-  // 各日付の平均値を計算
-  const labels = Object.keys(groupedData);
-  const values = labels.map(label => {
-    const items = groupedData[label];
-    const sum = items.reduce((acc, item) => acc + item[dataType], 0);
-    return sum / items.length;
-  });
-
-  return {
-    labels,
-    datasets: [
-      {
-        data: values
-      }
-    ]
-  };
-};
-
-// ワークアウト履歴を取得
+// ユーザーのトレーニング履歴を取得する関数
 export const getWorkoutHistory = async (req: Request, res: Response) => {
   try {
-    const userId = req.query.userId as string;
-    const limit = parseInt(req.query.limit as string) || 5;
-    const offset = parseInt(req.query.offset as string) || 0;
-
+    // 認証ミドルウェアからユーザーIDを取得
+    const userId = req.user?.id;
     if (!userId) {
-      return res.status(400).json({ message: 'ユーザーIDが必要です' });
+      return res.status(401).json({ message: '認証されていません' });
     }
 
-    // セッション履歴を取得
+    // クエリパラメータからページネーション情報を取得 (デフォルト値設定)
+    const limit = parseInt(req.query.limit as string || '5', 10);
+    const offset = parseInt(req.query.offset as string || '0', 10);
+
+    // 1. ユーザーのトレーニングセッションを新しい順に取得 (ページネーション適用)
     const { data: sessions, error: sessionsError } = await supabase
       .from('sessions')
-      .select(`
-        *,
-        session_training_days (
-          training_day: user_training_days (
-            title
-          )
-        ),
-        session_exercises (
-          exercise_name,
-          weight,
-          reps
-        )
-      `)
+      .select('id, start_time, duration') // 必要なカラムを選択
       .eq('user_id', userId)
-      .order('start_time', { ascending: false })
-      .range(offset, offset + limit - 1);
+      .order('start_time', { ascending: false }) // 新しい順
+      .range(offset, offset + limit - 1); // ページネーション
 
     if (sessionsError) {
-      return res.status(400).json({ message: 'トレーニング履歴の取得に失敗しました', error: sessionsError });
+      console.error('Error fetching workout history (sessions):', sessionsError);
+      return res.status(500).json({ message: 'トレーニング履歴の取得に失敗しました(セッション)', error: sessionsError.message });
     }
 
-    // レスポンス用にデータを整形
-    const workoutHistory = sessions?.map(session => {
-      // タイトルを取得
-      const title = session.session_training_days[0]?.training_day?.title || 'カスタムトレーニング';
-      
-      // 日付をフォーマット
-      const date = new Date(session.start_time);
-      const formattedDate = date.toLocaleDateString('ja-JP', { year: 'numeric', month: 'numeric', day: 'numeric' });
-      
-      // ハイライトを作成（最大重量のエクササイズ）
-      let highlight = '';
-      let maxWeight = 0;
-      let maxWeightExercise = '';
-      
-      session.session_exercises.forEach(exercise => {
-        if (exercise.weight > maxWeight) {
-          maxWeight = exercise.weight;
-          maxWeightExercise = exercise.exercise_name;
+    if (!sessions || sessions.length === 0) {
+      return res.status(200).json([]); // 履歴がない場合は空配列を返す
+    }
+
+    // 2. 各セッションの詳細情報（種目数やハイライト）を取得
+    //    効率化のため、セッションIDのリストを作成して一度に問い合わせる
+    const sessionIds = sessions.map(s => s.id);
+
+    const { data: exercisesInSessions, error: exercisesError } = await supabase
+      .from('session_exercises')
+      .select('session_id, exercise_name, weight, reps')
+      .in('session_id', sessionIds);
+
+    if (exercisesError) {
+      console.error('Error fetching workout history (exercises):', exercisesError);
+      return res.status(500).json({ message: 'トレーニング履歴の取得に失敗しました(エクササイズ)', error: exercisesError.message });
+    }
+
+    // 3. セッションごとにデータを整形してレスポンスを作成
+    const formattedHistory = sessions.map(session => {
+      const exercisesForThisSession = exercisesInSessions?.filter(ex => ex.session_id === session.id) || [];
+
+      // 種目数を計算
+      const exerciseCount = new Set(exercisesForThisSession.map(ex => ex.exercise_name)).size;
+
+      // ハイライトを作成 (例: 最も重い重量を扱った種目)
+      let highlights = "記録なし";
+      if (exercisesForThisSession.length > 0) {
+        const heaviestSet = exercisesForThisSession.reduce((max, current) =>
+          (current.weight || 0) > (max.weight || 0) ? current : max
+        , exercisesForThisSession[0]);
+        if(heaviestSet && heaviestSet.weight && heaviestSet.reps) {
+            highlights = `${heaviestSet.exercise_name} ${heaviestSet.weight}kg x ${heaviestSet.reps}回`;
+        } else if (heaviestSet) {
+            highlights = `${heaviestSet.exercise_name} ${heaviestSet.reps}回`; //自重など
         }
-      });
-      
-      if (maxWeightExercise) {
-        highlight = `${maxWeightExercise} ${maxWeight}kg`;
       }
 
       return {
-        id: session.id,
-        date: formattedDate,
-        title,
-        highlights: highlight,
-        exercises: session.session_exercises.length
+        id: session.id, // セッションIDも返すように変更 (詳細画面遷移用)
+        date: formatDateForHistory(new Date(session.start_time)), // 日付フォーマット関数 (後述)
+        title: `トレーニング (${formatDuration(session.duration)})`, // 仮のタイトル (期間を追加)
+        highlights: highlights,
+        exercises: exerciseCount, // モバイル側は数値を期待しているので '種目' はつけない
       };
-    }) || [];
+    });
 
-    res.json(workoutHistory);
+    return res.status(200).json(formattedHistory);
+
   } catch (error) {
-    console.error('ワークアウト履歴取得エラー:', error);
-    res.status(500).json({ message: 'サーバーエラー' });
+    console.error('Unexpected error in getWorkoutHistory:', error);
+    return res.status(500).json({ message: 'サーバーエラーが発生しました' });
   }
 };
+
+// 日付を 'YYYY/MM/DD' 形式にフォーマットする関数 (例)
+function formatDateForHistory(date: Date): string {
+  const year = date.getFullYear();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  return `${year}/${month}/${day}`;
+}
+
+// Interval 型の duration を 'XX分' 形式にフォーマットする関数 (PostgreSQL Interval 想定)
+function formatDuration(duration: any): string {
+    if (!duration) return '記録なし';
+    // duration が { hours: H, minutes: M, seconds: S } のようなオブジェクトと仮定
+    // または 'HH:MM:SS' 形式の文字列をパース
+    // ここでは単純化して合計分を返す例（実際のdurationの型に合わせて要調整）
+    let totalMinutes = 0;
+    if (typeof duration === 'object' && duration !== null) {
+        totalMinutes = (duration.hours || 0) * 60 + (duration.minutes || 0) + Math.round((duration.seconds || 0) / 60);
+    } else if (typeof duration === 'string') {
+        // 'HH:MM:SS' のパースなどが必要
+        // 簡単な例: '0 years 0 mons 0 days 1 hours 10 mins 0.0 secs' のような形式を仮定
+         const match = duration.match(/(\d+)\s+hours.*?(\d+)\s+mins/);
+         if(match && match.length >= 3) {
+             totalMinutes = parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+         } else {
+             // パース失敗時のフォールバック
+             return '記録なし';
+         }
+    }
+    return totalMinutes > 0 ? `${totalMinutes}分` : '記録なし';
+}
+
+// 進捗データを取得する関数
+export const getProgressData = async (req: Request, res: Response) => {
+  try {
+    // 認証とパラメータ取得
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ message: '認証されていません' });
+    }
+    const dataType = (req.query.dataType as string) || 'weight'; // デフォルトは 'weight'
+    const period = (req.query.period as string) || 'month'; // デフォルトは 'month'
+
+    // 期間に基づいて日付範囲を計算
+    const { startDate, endDate, previousStartDate, previousEndDate } = calculateDateRange(period);
+    const { labels, intervalFormat } = generateChartLabels(startDate, endDate, period);
+
+    let chartData: any = { labels: [], datasets: [{ data: [] }] };
+    let stats: any = {};
+
+    // データタイプに応じて処理を分岐
+    switch (dataType) {
+      case 'weight':
+        // --- 体重データの処理 ---
+        // 仮定: body_stats テーブル (user_id, weight, recorded_at) が存在する
+        const { data: weightData, error: weightError } = await supabase
+          .from('body_stats') // このテーブル名は仮です。実際のテーブル名に合わせる
+          .select('weight, recorded_at')
+          .eq('user_id', userId)
+          .gte('recorded_at', startDate.toISOString())
+          .lte('recorded_at', endDate.toISOString())
+          .order('recorded_at', { ascending: true });
+
+        if (weightError) throw new Error(`体重データの取得エラー: ${weightError.message}`);
+
+        // チャートデータの生成 (期間内の各ラベルに対応する最後の記録を採用する例)
+        chartData = formatChartData(weightData || [], labels, intervalFormat, 'recorded_at', 'weight');
+
+        // 統計データの計算 (先月比など)
+        const { data: previousWeightData } = await supabase
+          .from('body_stats')
+          .select('weight')
+          .eq('user_id', userId)
+          .gte('recorded_at', previousStartDate.toISOString())
+          .lte('recorded_at', previousEndDate.toISOString())
+          .order('recorded_at', { ascending: false }) // 最新の記録を取得
+          .limit(1);
+
+        const latestWeight = weightData?.[weightData.length - 1]?.weight;
+        const previousLatestWeight = previousWeightData?.[0]?.weight;
+        let weightChange = 0;
+        if (latestWeight && previousLatestWeight) {
+            weightChange = parseFloat((latestWeight - previousLatestWeight).toFixed(1));
+        }
+        stats = { change: weightChange };
+        break;
+
+      case 'strength':
+        // --- 筋力データの処理 (例: ベンチプレスの最大重量) ---
+
+        // 1. ユーザーIDと期間に該当するセッションIDを取得
+        const { data: relevantSessions, error: relevantSessionsError } = await supabase
+            .from('sessions')
+            .select('id') // セッションIDのみ取得
+            .eq('user_id', userId)
+            .gte('start_time', startDate.toISOString())
+            .lte('start_time', endDate.toISOString());
+
+        if (relevantSessionsError) {
+            throw new Error(`セッションIDの取得エラー: ${relevantSessionsError.message}`);
+        }
+
+        const sessionIds = relevantSessions?.map(s => s.id) || [];
+
+        // 該当セッションがない場合は空データを返す
+        if (sessionIds.length === 0) {
+          chartData = { labels: labels, datasets: [{ data: labels.map(() => 0) }] }; // 空のチャートデータ
+          stats = { maxWeights: [{ name: 'ベンチプレス', weight: 0 }] }; // デフォルト統計
+          break; // switch 文を抜ける
+        }
+
+        // 2. 取得したセッションIDリストと種目名で session_exercises をフィルタリング
+        const targetExercise = 'ベンチプレス'; // 対象とする種目
+        const { data: strengthData, error: strengthError } = await supabase
+          .from('session_exercises')
+          .select('weight, created_at')
+          .in('session_id', sessionIds)      // <- session_id でフィルタリング
+          .eq('exercise_name', targetExercise) // <- 種目名でフィルタリング
+          // .gte/.lte は session_id でフィルタ済みなので不要 (created_at でフィルタしたい場合は残す)
+          .order('created_at', { ascending: true });
+
+        if (strengthError) {
+          // このエラーメッセージは正しくなるはず
+          throw new Error(`筋力データの取得エラー: ${strengthError.message}`);
+        }
+
+        // チャートデータの生成 (期間内の各ラベルに対応する最大重量を採用する例)
+        chartData = formatChartData(strengthData || [], labels, intervalFormat, 'created_at', 'weight', true); // max を使う
+
+        // 統計データの計算 (期間内の自己ベスト)
+        const maxWeightRecord = (strengthData || []).reduce((max, current) =>
+          (current.weight || 0) > (max.weight || 0) ? current : max
+        , { weight: 0 });
+
+        stats = {
+            maxWeights: [{
+                name: targetExercise,
+                weight: maxWeightRecord.weight || 0
+            }]
+        };
+        break;
+
+      case 'workouts':
+        // --- トレーニング数データの処理 ---
+        const { data: workoutCountData, error: workoutCountError } = await supabase
+          .from('sessions')
+          .select('start_time')
+          .eq('user_id', userId)
+          .gte('start_time', startDate.toISOString())
+          .lte('start_time', endDate.toISOString());
+
+        if (workoutCountError) throw new Error(`トレーニング数データの取得エラー: ${workoutCountError.message}`);
+
+        // チャートデータの生成 (期間内の各ラベルに対応するセッション数をカウント)
+        chartData = formatCountChartData(workoutCountData || [], labels, intervalFormat, 'start_time');
+
+        // 統計データの計算 (例: 今週のトレーニング回数 vs 目標)
+        const thisWeekStart = startOfWeek(new Date(), { weekStartsOn: 1 }); // 週の始まりを月曜に
+        const thisWeekEnd = endOfWeek(new Date(), { weekStartsOn: 1 });
+        const workoutsThisWeek = (workoutCountData || []).filter(s => {
+            const startTime = new Date(s.start_time);
+            return startTime >= thisWeekStart && startTime <= thisWeekEnd;
+        }).length;
+        const weeklyTarget = 5; // 仮の目標値
+        stats = { total: workoutsThisWeek, target: weeklyTarget };
+        break;
+
+      default:
+        return res.status(400).json({ message: '無効なデータタイプです' });
+    }
+
+    // レスポンスを返す
+    return res.status(200).json({ chartData, stats });
+
+  } catch (error) {
+    console.error(`Error fetching progress data (${req.query.dataType}, ${req.query.period}):`, error);
+    return res.status(500).json({ message: error.message || 'サーバーエラーが発生しました' });
+  }
+};
+
+// --- ヘルパー関数 ---
+
+// 期間に基づいて日付範囲を計算
+function calculateDateRange(period: string) {
+  const now = new Date();
+  let startDate: Date, endDate: Date, previousStartDate: Date, previousEndDate: Date;
+
+  endDate = new Date(); // 常に今日まで
+
+  switch (period) {
+    case 'week':
+      startDate = startOfWeek(now, { weekStartsOn: 1 }); // 月曜始まり
+      previousStartDate = startOfWeek(subDays(now, 7), { weekStartsOn: 1 });
+      previousEndDate = endOfWeek(subDays(now, 7), { weekStartsOn: 1 });
+      break;
+    case 'year':
+      startDate = startOfYear(now);
+      previousStartDate = startOfYear(subDays(now, 365));
+      previousEndDate = endOfYear(subDays(now, 365));
+      break;
+    case 'month': // default to month
+    default:
+      startDate = startOfMonth(now);
+      previousStartDate = startOfMonth(subDays(now, 30)); // 簡易的に30日前
+      previousEndDate = endOfMonth(subDays(now, 30));
+      break;
+  }
+  return { startDate, endDate, previousStartDate, previousEndDate };
+}
+
+// チャートのラベルを生成
+function generateChartLabels(startDate: Date, endDate: Date, period: string): { labels: string[], intervalFormat: (date: Date) => string } {
+    let labels: string[] = [];
+    let intervalFormat: (date: Date) => string;
+
+    switch (period) {
+        case 'week':
+            // 週表示: 月, 火, ..., 日
+            labels = eachDayOfInterval({ start: startDate, end: endDate }).map(d => format(d, 'M/d')); // or 'EEE' for 曜
+            intervalFormat = (date: Date) => format(date, 'yyyy-MM-dd');
+            break;
+        case 'year':
+            // 年表示: 1月, 2月, ..., 12月
+            labels = eachMonthOfInterval({ start: startDate, end: endDate }).map(d => format(d, 'M月'));
+            intervalFormat = (date: Date) => format(date, 'yyyy-MM');
+            break;
+        case 'month': // default to month
+        default:
+            // 月表示: 1週目, 2週目, ... または 日付
+             // labels = eachDayOfInterval({ start: startDate, end: endDate }).map(d => format(d, 'd')); // 日にち
+             // labels = ['W1', 'W2', 'W3', 'W4', 'W5']; // 週ごと (週の区切りを正確に計算する必要あり)
+             // 簡単のため日ごとにする
+            labels = eachDayOfInterval({ start: startDate, end: endDate }).map(d => format(d, 'd')); // 日付
+            intervalFormat = (date: Date) => format(date, 'yyyy-MM-dd');
+            break;
+    }
+    return { labels, intervalFormat };
+}
+
+
+// データからチャート形式に整形 (平均値 or 最大値)
+function formatChartData(
+    data: any[],
+    labels: string[],
+    intervalFormat: (date: Date) => string,
+    dateField: string,
+    valueField: string,
+    useMax: boolean = false // 最大値を使うか、最後の値を使うか
+): { labels: string[], datasets: [{ data: number[] }] } {
+
+    const datasetData = labels.map(labelKeyPart => {
+        // labels 配列が日付のどの部分を表すかに基づいてフィルタリングキーを作成する必要がある
+        // ここでは intervalFormat を使って日付をラベルの期間形式に変換してグループ化
+        const valuesInInterval = data
+            .filter(item => {
+                if (!item[dateField]) return false;
+                // intervalFormat(new Date(item[dateField])) が labels のどの要素に対応するか判定する必要がある
+                // 例: labelsが'1', '2'... の場合、 format(new Date(item[dateField]), 'd') === labelKeyPart
+                // 例: labelsが'M/d'の場合、format(new Date(item[dateField]), 'M/d') === labelKeyPart
+                // 例: labelsが'M月'の場合、format(new Date(item[dateField]), 'M月') === labelKeyPart
+                 try {
+                    // この部分のロジックは labels の生成方法に依存するため調整が必要
+                    // 簡単な例: 日付ラベルの場合 (labels が 'd' または 'M/d')
+                    if (labels[0].includes('/')) { // 'M/d'
+                        return format(new Date(item[dateField]), 'M/d') === labelKeyPart;
+                    } else if (!isNaN(parseInt(labels[0]))) { // 'd'
+                         return format(new Date(item[dateField]), 'd') === labelKeyPart;
+                    } else if (labels[0].includes('月')) { // 'M月'
+                        return format(new Date(item[dateField]), 'M月') === labelKeyPart;
+                    }
+                    return false; // 不明なラベル形式
+                 } catch { return false; } // 不正な日付データは無視
+            })
+            .map(item => item[valueField])
+            .filter(value => value !== null && !isNaN(parseFloat(value))); // 数値のみ抽出
+
+        if (valuesInInterval.length === 0) return 0; // データがない期間は0
+
+        if (useMax) {
+            return Math.max(...valuesInInterval.map(v => parseFloat(v)));
+        } else {
+            // 最後の記録を採用 (データは日付順にソートされている想定)
+            return parseFloat(valuesInInterval[valuesInInterval.length - 1]);
+        }
+    });
+
+    return { labels, datasets: [{ data: datasetData }] };
+}
+
+// データから件数チャート形式に整形
+function formatCountChartData(
+    data: any[],
+    labels: string[],
+    intervalFormat: (date: Date) => string,
+    dateField: string
+): { labels: string[], datasets: [{ data: number[] }] } {
+
+     const datasetData = labels.map(labelKeyPart => {
+         const countInInterval = data.filter(item => {
+             if (!item[dateField]) return false;
+              try {
+                 // formatChartData と同様のロジックでラベルに対応するデータをフィルタ
+                 if (labels[0].includes('/')) { return format(new Date(item[dateField]), 'M/d') === labelKeyPart; }
+                 else if (!isNaN(parseInt(labels[0]))) { return format(new Date(item[dateField]), 'd') === labelKeyPart; }
+                 else if (labels[0].includes('月')) { return format(new Date(item[dateField]), 'M月') === labelKeyPart; }
+                 return false;
+              } catch { return false; }
+         }).length; // 件数をカウント
+         return countInInterval;
+     });
+
+     return { labels, datasets: [{ data: datasetData }] };
+}
