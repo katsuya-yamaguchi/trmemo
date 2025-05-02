@@ -1,98 +1,133 @@
-import { useState } from "react"
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView } from "react-native"
-import { useNavigation } from "@react-navigation/native"
-import { useTheme } from "../context/theme-context"
-import { Card } from "../components/ui/card"
-import { Calendar, ChevronRight, Dumbbell } from "lucide-react-native"
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, ActivityIndicator, Alert } from 'react-native';
+import { useNavigation, NavigationProp } from '@react-navigation/native';
+import { useTheme } from '../context/theme-context';
+import { useAuth } from '../context/auth-context';
+import { workoutApi } from '../services/api';
+import { Card } from '../components/ui/card';
+import { Calendar, ChevronRight, Dumbbell } from 'lucide-react-native';
+
+// --- 型定義 (バックエンドのレスポンスに合わせる) ---
+type ExerciseDetail = {
+  id: string;
+  name: string;
+  sets: number;
+  reps: string; // 例: "8-12"
+};
+
+type TrainingDay = {
+  id: string;
+  day_number: number;
+  title: string;
+  estimated_duration: number;
+  exercises: ExerciseDetail[];
+};
+
+type TrainingPlan = {
+  id: string;
+  name: string;
+  startDate?: string; // オプショナルに変更 (バックエンドのレスポンスによる)
+  trainingDays: TrainingDay[];
+};
+
+// ナビゲーションの型定義
+type RootStackParamList = {
+  Training: undefined;
+  TrainingDetail: { workout: any }; // TrainingDetail に渡す型を調整する必要あり
+};
+// --- ここまで型定義 ---
 
 export default function TrainingScreen() {
-  const navigation = useNavigation()
-  const { colors } = useTheme()
-  const [activeTab, setActiveTab] = useState(0)
+  const navigation = useNavigation<NavigationProp<RootStackParamList>>();
+  const { colors } = useTheme();
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState(0);
 
-  // Mock data for training program
-  const program = {
-    title: "筋力向上 8週間プログラム",
-    days: [
-      { id: 1, name: "Day 1", focus: "胸・三頭筋" },
-      { id: 2, name: "Day 2", focus: "背中・二頭筋" },
-      { id: 3, name: "Day 3", focus: "脚・肩" },
-      { id: 4, name: "Day 4", focus: "腕・腹筋" },
-      { id: 5, name: "Day 5", focus: "全身" },
-      { id: 6, name: "休息日", focus: "ストレッチ" },
-      { id: 7, name: "休息日", focus: "ストレッチ" },
-    ],
-    currentWeek: 3,
-    totalWeeks: 8,
+  // --- State の追加 ---
+  const [trainingPlan, setTrainingPlan] = useState<TrainingPlan | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // --- useEffect でデータを取得 ---
+  useEffect(() => {
+    const fetchTrainingPlan = async () => {
+      if (!user?.id) {
+        // ユーザーIDがない場合はエラー状態にしてローディング終了
+        setError("ユーザー認証情報が見つかりません。");
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+      try {
+        const data: TrainingPlan = await workoutApi.getTrainingPlan(user.id);
+        // day_number でソートしておく
+        if (data && data.trainingDays) {
+            data.trainingDays.sort((a, b) => a.day_number - b.day_number);
+        }
+        setTrainingPlan(data);
+      } catch (err: any) {
+        console.error("Failed to fetch training plan:", err);
+        const errorMessage = err.message || "トレーニングプランの取得に失敗しました";
+        setError(errorMessage);
+        Alert.alert("エラー", errorMessage);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTrainingPlan();
+  }, [user]); // user が変更された場合 (ログイン/ログアウト時など) に再取得
+
+  // トレーニング詳細画面への遷移関数
+  const navigateToWorkout = (day: TrainingDay) => {
+     if (!trainingPlan) return;
+    // TrainingDetailScreen が期待するデータ形式に変換
+     const workoutDataForDetail = {
+       title: day.title,
+       day: `Day ${day.day_number}`,
+       program: trainingPlan.name,
+       exercises: day.exercises.map(ex => ({ name: ex.name, sets: ex.sets, reps: ex.reps })),
+       duration: `${day.estimated_duration}分`
+     };
+     navigation.navigate("TrainingDetail", { workout: workoutDataForDetail });
+  };
+
+  // --- ローディングとエラー表示 ---
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </SafeAreaView>
+    );
   }
 
-  // Mock data for workouts
-  const workouts = [
-    {
-      id: 1,
-      title: "胸・三頭筋",
-      exercises: [
-        { name: "ベンチプレス", sets: 4, reps: "8-10" },
-        { name: "インクラインダンベルプレス", sets: 3, reps: "10-12" },
-        { name: "ケーブルフライ", sets: 3, reps: "12-15" },
-        { name: "トライセップスプッシュダウン", sets: 3, reps: "12-15" },
-        { name: "スカルクラッシャー", sets: 3, reps: "10-12" },
-      ],
-      duration: "50分",
-    },
-    {
-      id: 2,
-      title: "背中・二頭筋",
-      exercises: [
-        { name: "デッドリフト", sets: 4, reps: "6-8" },
-        { name: "ラットプルダウン", sets: 3, reps: "10-12" },
-        { name: "シーテッドロー", sets: 3, reps: "10-12" },
-        { name: "バイセップカール", sets: 3, reps: "10-12" },
-        { name: "ハンマーカール", sets: 3, reps: "10-12" },
-      ],
-      duration: "55分",
-    },
-    {
-      id: 3,
-      title: "脚・肩",
-      exercises: [
-        { name: "スクワット", sets: 4, reps: "8-10" },
-        { name: "レッグプレス", sets: 3, reps: "10-12" },
-        { name: "レッグエクステンション", sets: 3, reps: "12-15" },
-        { name: "ショルダープレス", sets: 3, reps: "8-10" },
-        { name: "サイドラテラルレイズ", sets: 3, reps: "12-15" },
-      ],
-      duration: "60分",
-    },
-    {
-      id: 4,
-      title: "腕・腹筋",
-      exercises: [
-        { name: "バイセップカール", sets: 4, reps: "10-12" },
-        { name: "トライセップスエクステンション", sets: 4, reps: "10-12" },
-        { name: "ハンマーカール", sets: 3, reps: "10-12" },
-        { name: "クランチ", sets: 3, reps: "15-20" },
-        { name: "レッグレイズ", sets: 3, reps: "15-20" },
-      ],
-      duration: "45分",
-    },
-    {
-      id: 5,
-      title: "全身",
-      exercises: [
-        { name: "ベンチプレス", sets: 3, reps: "8-10" },
-        { name: "ラットプルダウン", sets: 3, reps: "10-12" },
-        { name: "スクワット", sets: 3, reps: "8-10" },
-        { name: "ショルダープレス", sets: 3, reps: "8-10" },
-        { name: "プランク", sets: 3, reps: "30秒" },
-      ],
-      duration: "50分",
-    },
-  ]
-
-  const navigateToWorkout = (workout) => {
-    navigation.navigate("TrainingDetail" as never, { workout } as never)
+  if (error) {
+    return (
+      <SafeAreaView style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+        <Text style={[styles.errorText, { color: colors.destructive }]}>エラー: {error}</Text>
+        {/* TODO: リトライボタンなどを追加 */}
+      </SafeAreaView>
+    );
   }
+
+  if (!trainingPlan) {
+      return (
+          <SafeAreaView style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+              <Text style={[{ color: colors.text }]}>トレーニングプランが見つかりません。</Text>
+              {/* TODO: プラン作成への導線などを追加 */}
+          </SafeAreaView>
+      );
+  }
+  // --- ここまで ---
+
+  // アクティブなタブに対応するトレーニング日を取得
+  // trainingDays はソート済みと仮定
+  const activeDay = trainingPlan.trainingDays[activeTab];
+  // 休息日かどうかを判定 (例: exercises が空 or title が "休息日")
+  const isRestDay = !activeDay || activeDay.exercises.length === 0 || activeDay.title.includes("休息日");
+
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
@@ -100,10 +135,7 @@ export default function TrainingScreen() {
         <View style={styles.header}>
           <Text style={[styles.title, { color: colors.text }]}>トレーニングプラン</Text>
           <View style={styles.programInfo}>
-            <Text style={[styles.programTitle, { color: colors.text }]}>{program.title}</Text>
-            <Text style={[styles.programProgress, { color: colors.text }]}>
-              Week {program.currentWeek}/{program.totalWeeks}
-            </Text>
+            <Text style={[styles.programTitle, { color: colors.text }]}>{trainingPlan.name}</Text>
           </View>
         </View>
 
@@ -113,40 +145,46 @@ export default function TrainingScreen() {
           style={styles.tabsContainer}
           contentContainerStyle={styles.tabsContent}
         >
-          {program.days.map((day, index) => (
+          {trainingPlan.trainingDays.map((day, index) => (
             <TouchableOpacity
               key={day.id}
-              style={[styles.tab, activeTab === index && { backgroundColor: colors.primary }]}
+              style={[
+                  styles.tab,
+                  activeTab === index && { backgroundColor: colors.primary },
+                  { borderColor: colors.border }
+              ]}
               onPress={() => setActiveTab(index)}
             >
-              <Text style={[styles.tabText, { color: activeTab === index ? "#fff" : colors.text }]}>{day.name}</Text>
+              <Text style={[styles.tabText, { color: activeTab === index ? "#fff" : colors.text }]}>
+                Day {day.day_number}
+              </Text>
               <Text style={[styles.tabSubtext, { color: activeTab === index ? "#fff" : colors.text, opacity: 0.7 }]}>
-                {day.focus}
+                {day.title}
               </Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
 
         <View style={styles.workoutContainer}>
-          {activeTab < 5 ? (
+          {activeDay && !isRestDay ? (
             <Card style={[styles.workoutCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.workoutHeader}>
                 <View style={styles.workoutTitleContainer}>
                   <Dumbbell size={20} color={colors.primary} />
-                  <Text style={[styles.workoutTitle, { color: colors.text }]}>{workouts[activeTab].title}</Text>
+                  <Text style={[styles.workoutTitle, { color: colors.text }]}>{activeDay.title}</Text>
                 </View>
                 <View style={[styles.durationBadge, { backgroundColor: colors.primary }]}>
-                  <Text style={styles.durationText}>{workouts[activeTab].duration}</Text>
+                  <Text style={styles.durationText}>{activeDay.estimated_duration}分</Text>
                 </View>
               </View>
 
               <View style={styles.exerciseList}>
-                {workouts[activeTab].exercises.map((exercise, index) => (
+                {activeDay.exercises.map((exercise, index) => (
                   <View
-                    key={index}
+                    key={exercise.id}
                     style={[
                       styles.exerciseItem,
-                      index < workouts[activeTab].exercises.length - 1 && {
+                      index < activeDay.exercises.length - 1 && {
                         borderBottomWidth: 1,
                         borderBottomColor: colors.border,
                       },
@@ -162,7 +200,7 @@ export default function TrainingScreen() {
 
               <TouchableOpacity
                 style={[styles.startButton, { backgroundColor: colors.primary }]}
-                onPress={() => navigateToWorkout(workouts[activeTab])}
+                onPress={() => navigateToWorkout(activeDay)}
               >
                 <Text style={styles.startButtonText}>トレーニング開始</Text>
                 <ChevronRight size={20} color="#fff" />
@@ -233,9 +271,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
   },
-  programProgress: {
-    fontSize: 14,
-  },
   tabsContainer: {
     marginBottom: 20,
   },
@@ -248,6 +283,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginRight: 10,
     minWidth: 100,
+    borderWidth: 1,
+    alignItems: 'center',
   },
   tabText: {
     fontSize: 16,
@@ -371,6 +408,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "500",
     marginRight: 5,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  errorText: {
+      fontSize: 16,
+      textAlign: 'center',
   },
 })
 
