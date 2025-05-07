@@ -3,13 +3,15 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, Sa
 import { useTheme } from "../context/theme-context"
 import { useAuth } from "../context/auth-context"
 import { Card } from "../components/ui/card"
-import { User, Bell, Moon, LogOut, ChevronRight, Shield, HelpCircle, FileText, Share2 } from "lucide-react-native"
+import { User, Bell, Moon, LogOut, ChevronRight, Shield, HelpCircle, FileText, Share2, UserCircle } from "lucide-react-native"
+import { useNavigation } from "@react-navigation/native"
 
 export default function ProfileScreen() {
   const { colors, isDarkMode, toggleTheme } = useTheme()
   const { user, signOut } = useAuth()
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
   const [reminderTime, setReminderTime] = useState("08:00")
+  const navigation = useNavigation()
 
   const handleSignOut = async () => {
     Alert.alert("ログアウト", "ログアウトしてもよろしいですか？", [
@@ -95,9 +97,12 @@ export default function ProfileScreen() {
           <Text style={[styles.sectionTitle, { color: colors.text }]}>アカウント設定</Text>
 
           <Card style={[styles.settingsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <TouchableOpacity style={styles.settingItem}>
+            <TouchableOpacity 
+              style={styles.settingItem} 
+              onPress={() => navigation.navigate('AccountInfo')}
+            >
               <View style={styles.settingLeft}>
-                <User size={20} color={colors.primary} style={styles.settingIcon} />
+                <UserCircle size={20} color={colors.text} style={styles.settingIcon} />
                 <Text style={[styles.settingText, { color: colors.text }]}>アカウント情報</Text>
               </View>
               <ChevronRight size={20} color={colors.text} />

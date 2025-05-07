@@ -16,6 +16,7 @@ import ProfileScreen from "./screens/profile-screen"
 import TrainingDetailScreen from "./screens/training-detail-screen"
 import OnboardingScreen from "./screens/onboarding-screen"
 import ExerciseLibraryScreen from "./screens/exercise-library-screen"
+import AccountInfoScreen from './screens/account-info-screen'
 
 // Context
 import { AuthProvider, useAuth } from "./context/auth-context"
@@ -50,9 +51,18 @@ function MainTabs() {
       <Tab.Screen name="トレーニング" component={TrainingScreen} />
       <Tab.Screen name="ライブラリ" component={ExerciseLibraryScreen} />
       <Tab.Screen name="進捗" component={ProgressScreen} />
-      <Tab.Screen name="プロフィール" component={ProfileScreen} />
+      <Tab.Screen name="プロフィール" component={ProfileStackNavigator} />
     </Tab.Navigator>
   )
+}
+
+function ProfileStackNavigator() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="ProfileMain" component={ProfileScreen} />
+      <Stack.Screen name="AccountInfo" component={AccountInfoScreen} />
+    </Stack.Navigator>
+  );
 }
 
 function AppNavigator() {
