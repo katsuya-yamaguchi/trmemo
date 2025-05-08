@@ -110,9 +110,12 @@ export default function ProfileScreen() {
 
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-            <TouchableOpacity style={styles.settingItem}>
+            <TouchableOpacity 
+              style={styles.settingItem}
+              onPress={() => navigation.navigate('PrivacySettings')}
+            >
               <View style={styles.settingLeft}>
-                <Shield size={20} color={colors.primary} style={styles.settingIcon} />
+                <Shield size={20} color={colors.text} style={styles.settingIcon} />
                 <Text style={[styles.settingText, { color: colors.text }]}>プライバシー設定</Text>
               </View>
               <ChevronRight size={20} color={colors.text} />

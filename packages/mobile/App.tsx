@@ -17,6 +17,7 @@ import TrainingDetailScreen from "./screens/training-detail-screen"
 import OnboardingScreen from "./screens/onboarding-screen"
 import ExerciseLibraryScreen from "./screens/exercise-library-screen"
 import AccountInfoScreen from './screens/account-info-screen'
+import PrivacySettingsScreen from './screens/privacy-settings-screen'
 
 // Context
 import { AuthProvider, useAuth } from "./context/auth-context"
@@ -61,6 +62,7 @@ function ProfileStackNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="ProfileMain" component={ProfileScreen} />
       <Stack.Screen name="AccountInfo" component={AccountInfoScreen} />
+      <Stack.Screen name="PrivacySettings" component={PrivacySettingsScreen} />
     </Stack.Navigator>
   );
 }
