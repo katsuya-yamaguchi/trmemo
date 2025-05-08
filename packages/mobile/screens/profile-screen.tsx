@@ -204,20 +204,13 @@ export default function ProfileScreen() {
           <Text style={[styles.sectionTitle, { color: colors.text }]}>その他</Text>
 
           <Card style={[styles.settingsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <TouchableOpacity style={styles.settingItem}>
+            <TouchableOpacity 
+              style={styles.settingItem}
+              onPress={() => navigation.navigate('HelpSupport')}
+            >
               <View style={styles.settingLeft}>
-                <HelpCircle size={20} color={colors.primary} style={styles.settingIcon} />
+                <HelpCircle size={20} color={colors.text} style={styles.settingIcon} />
                 <Text style={[styles.settingText, { color: colors.text }]}>ヘルプ・サポート</Text>
-              </View>
-              <ChevronRight size={20} color={colors.text} />
-            </TouchableOpacity>
-
-            <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
-            <TouchableOpacity style={styles.settingItem}>
-              <View style={styles.settingLeft}>
-                <FileText size={20} color={colors.primary} style={styles.settingIcon} />
-                <Text style={[styles.settingText, { color: colors.text }]}>利用規約・プライバシーポリシー</Text>
               </View>
               <ChevronRight size={20} color={colors.text} />
             </TouchableOpacity>

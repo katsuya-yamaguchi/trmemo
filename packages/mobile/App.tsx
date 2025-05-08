@@ -18,6 +18,10 @@ import OnboardingScreen from "./screens/onboarding-screen"
 import ExerciseLibraryScreen from "./screens/exercise-library-screen"
 import AccountInfoScreen from './screens/account-info-screen'
 import PrivacySettingsScreen from './screens/privacy-settings-screen'
+import HelpSupportScreen from './screens/help-support-screen'
+import ContactUsScreen from './screens/contact-us-screen'
+import TermsOfServiceScreen from './screens/terms-of-service-screen'
+import PrivacyPolicyScreen from './screens/privacy-policy-screen'
 
 // Context
 import { AuthProvider, useAuth } from "./context/auth-context"
@@ -63,6 +67,10 @@ function ProfileStackNavigator() {
       <Stack.Screen name="ProfileMain" component={ProfileScreen} />
       <Stack.Screen name="AccountInfo" component={AccountInfoScreen} />
       <Stack.Screen name="PrivacySettings" component={PrivacySettingsScreen} />
+      <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
+      <Stack.Screen name="ContactUsScreen" component={ContactUsScreen} />
+      <Stack.Screen name="TermsOfService" component={TermsOfServiceScreen} />
+      <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
     </Stack.Navigator>
   );
 }
