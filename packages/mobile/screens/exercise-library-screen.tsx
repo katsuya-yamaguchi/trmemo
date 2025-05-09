@@ -119,7 +119,7 @@ export default function ExerciseLibraryScreen({ navigation }) {
   if (error) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }}>
-        <Text style={{ color: colors.destructive, marginBottom: 10 }}>エラー: {error}</Text>
+        <Text style={{ color: colors.error, marginBottom: 10 }}>エラー: {error}</Text>
         {/* 必要であればリトライボタンなどを追加 */}
       </SafeAreaView>
     )

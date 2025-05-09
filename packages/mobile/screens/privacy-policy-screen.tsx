@@ -1,53 +1,48 @@
-import React from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, ActivityIndicator, Alert, useColorScheme } from 'react-native';
 import { useTheme } from '../context/theme-context';
 import { ChevronLeft } from 'lucide-react-native';
-
-// Placeholder for Privacy Policy content
-const privacyPolicyContent = `
-最終更新日: YYYY年MM月DD日
-
-[あなたのアプリ名/サービス名]（以下「本サービス」といいます。）は、ユーザーのプライバシーを尊重し、個人情報の保護に最大限の注意を払っています。本プライバシーポリシー（以下「本ポリシー」といいます。）は、本サービスにおける個人情報の収集、利用、開示、保護に関する方針を定めたものです。
-
-第1条（収集する個人情報）
-当社は、本サービスの提供にあたり、以下の情報を収集することがあります。
-1. ユーザーからご提供いただく情報：氏名、メールアドレス、パスワード、その他利用登録に必要な情報。
-2. 本サービスの利用に伴い自動的に取得する情報：IPアドレス、Cookie情報、閲覧履歴、利用状況など。
-3. 第三者から取得する情報：ユーザーがSNS連携を許可した場合の当該SNSアカウント情報など。
-
-第2条（個人情報の利用目的）
-当社は、収集した個人情報を以下の目的で利用します。
-1. 本サービスの提供、運営、改善のため。
-2. ユーザーからのお問い合わせに対応するため。
-3. 本サービスに関する重要なお知らせやメンテナンス情報などを連絡するため。
-4. 利用規約に違反する行為への対応のため。
-5. 個人を特定できない形式に加工した統計データを作成するため。
-6. 上記の利用目的に付随する目的のため。
-
-第3条（個人情報の第三者提供）
-当社は、次に掲げる場合を除いて、あらかじめユーザーの同意を得ることなく、第三者に個人情報を提供することはありません。ただし、個人情報保護法その他の法令で認められる場合を除きます。
-1. 法令に基づく場合。
-2. 人の生命、身体または財産の保護のために必要がある場合であって、本人の同意を得ることが困難であるとき。
-3. 公衆衛生の向上または児童の健全な育成の推進のために特に必要がある場合であって、本人の同意を得ることが困難であるとき。
-4. 国の機関もしくは地方公共団体またはその委託を受けた者が法令の定める事務を遂行することに対して協力する必要がある場合であって、本人の同意を得ることにより当該事務の遂行に支障を及ぼすおそれがあるとき。
-
-[...以下、必要な条項を追記してください...]
-
-第X条（個人情報の開示、訂正等）
-ユーザーは、当社の保有する自己の個人情報が誤った情報である場合には、当社が定める手続きにより、当社に対して個人情報の訂正、追加または削除を請求することができます。当社は、ユーザーから前項の請求を受けてその請求に応じる必要があると判断した場合には、遅滞なく、当該個人情報の訂正等を行うものとします。
-
-第Y条（プライバシーポリシーの変更）
-本ポリシーの内容は、法令その他本ポリシーに別段の定めのある事項を除いて、ユーザーに通知することなく、変更することができるものとします。当社が別途定める場合を除いて、変更後のプライバシーポリシーは、本ウェブサイトに掲載したときから効力を生じるものとします。
-
-第Z条（お問い合わせ窓口）
-本ポリシーに関するお問い合わせは、下記の窓口までお願いいたします。
-[お問い合わせ先情報（メールアドレスなど）]
-
-以上
-`;
+import { workoutApi } from '../services/api';
+import MarkdownDisplay from 'react-native-markdown-display';
 
 export default function PrivacyPolicyScreen({ navigation }) {
   const { colors } = useTheme();
+  const colorScheme = useColorScheme();
+  const [policyContent, setPolicyContent] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchPolicy = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        const response = await workoutApi.getPrivacyPolicy();
+        if (response && typeof response.content === 'string') {
+          setPolicyContent(response.content);
+        } else {
+          throw new Error('プライバシーポリシーの形式が正しくありません。');
+        }
+      } catch (err: any) {
+        console.error('Failed to fetch privacy policy:', err);
+        setError(err.message || 'プライバシーポリシーの取得に失敗しました。');
+        Alert.alert('エラー', err.message || 'プライバシーポリシーの取得に失敗しました。');
+      }
+      setIsLoading(false);
+    };
+
+    fetchPolicy();
+  }, []);
+
+  const markdownStyles = StyleSheet.create({
+    body: { color: colors.text, fontSize: 15, lineHeight: 24 },
+    heading1: { color: colors.text, fontSize: 28, fontWeight: 'bold', marginTop: 20, marginBottom: 10, borderBottomWidth: 1, borderColor: colors.border, paddingBottom: 5 },
+    heading2: { color: colors.text, fontSize: 22, fontWeight: 'bold', marginTop: 18, marginBottom: 8 },
+    heading3: { color: colors.text, fontSize: 18, fontWeight: '600', marginTop: 16, marginBottom: 6 },
+    link: { color: colors.primary, textDecorationLine: 'underline' },
+    bullet_list_icon: { color: colors.text },
+    ordered_list_icon: { color: colors.text },
+  });
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
@@ -60,9 +55,15 @@ export default function PrivacyPolicyScreen({ navigation }) {
       </View>
 
       <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-        <Text style={[styles.contentText, { color: colors.text }]}>
-          {privacyPolicyContent}
-        </Text>
+        {isLoading ? (
+          <ActivityIndicator size="large" color={colors.primary} style={styles.loader} />
+        ) : error ? (
+          <Text style={[styles.errorText, { color: colors.error || 'red' }]}>{error}</Text>
+        ) : (
+          <MarkdownDisplay style={markdownStyles}>
+            {policyContent}
+          </MarkdownDisplay>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -75,6 +76,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     paddingVertical: 20,
+    flexGrow: 1,
   },
   header: {
     flexDirection: 'row',
@@ -86,17 +88,21 @@ const styles = StyleSheet.create({
   },
   backButton: {
     padding: 8,
-    marginLeft: -8, 
+    marginLeft: -8,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: 'bold',
   },
   placeholder: {
-    width: 24 + 16, 
+    width: 24 + 16,
   },
-  contentText: {
-    fontSize: 14,
-    lineHeight: 22,
+  loader: {
+    marginTop: 50,
+  },
+  errorText: {
+    textAlign: 'center',
+    fontSize: 16,
+    padding: 20,
   },
 }); 

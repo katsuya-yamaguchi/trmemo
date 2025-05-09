@@ -8,6 +8,7 @@ import supabase from './config/database';  // データベースクライアン�
 import homeRoutes from './routes/homeRoutes';
 import userRoutes from './routes/userRoutes';
 import workoutRoutes from './routes/workoutRoutes';
+import legalRoutes from './routes/legalRoutes'; // Import the new legal routes
 
 dotenv.config();
 const app = express();
@@ -20,6 +21,7 @@ app.use(express.json()); // JSONボディをパース
 app.use('/api/home', homeRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/workouts', workoutRoutes);
+app.use('/api/legal', legalRoutes);
 
 // 基本的なヘルスチェックエンドポイント
 app.get('/api/health', (req, res) => {

@@ -141,5 +141,18 @@ export const workoutApi = {
   // トレーニング履歴取得
   getWorkoutHistory: async (userId: string, limit: number = 5, offset: number = 0) => {
     return fetchWithAuth(`/workouts/history?userId=${userId}&limit=${limit}&offset=${offset}`);
-  }
+  },
+
+  getTermsOfService: async () => {
+    return fetchWithAuth('/legal/terms-of-service'); // No userId needed for public content
+  },
+
+  getPrivacyPolicy: async () => {
+    return fetchWithAuth('/legal/privacy-policy'); // No userId needed for public content
+  },
+  
+  // Example of how it might be structured if it was part of a user object or similar
+  // getUserSpecificLegalDoc: async (docType: string, userId: string) => {
+  //   return fetchWithAuth(`/user/${userId}/legal/${docType}`); 
+  // }
 };

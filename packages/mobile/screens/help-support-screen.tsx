@@ -9,7 +9,7 @@ const helpTopics = [
   // { id: '2', title: 'アプリの使い方', icon: <LifeBuoy />, screen: 'AppUsageGuide' }, // Placeholder
   { id: '3', title: 'お問い合わせ', icon: <MessageSquare />, screen: 'ContactUsScreen' }, // Changed to specific screen name for navigation
   { id: '4', title: '利用規約', icon: <FileText/>, screen: 'TermsOfService' }, // Changed from action to screen
-  { id: '5', title: 'プライバシーポリシー', icon: <FileText/>, action: () => Linking.openURL('https://example.com/privacy') }, // Example external link
+  { id: '5', title: 'プライバシーポリシー', icon: <FileText/>, screen: 'PrivacyPolicy' }, // Example external link
 ];
 
 export default function HelpSupportScreen({ navigation }) {
@@ -24,6 +24,8 @@ export default function HelpSupportScreen({ navigation }) {
         navigation.navigate('ContactUsScreen'); // Navigate to ContactUsScreen
       } else if (topic.screen === 'TermsOfService') { // Added condition for TermsOfService
         navigation.navigate('TermsOfService');
+      } else if (topic.screen === 'PrivacyPolicy') {
+        navigation.navigate('PrivacyPolicy');
       } else {
         console.log(`Navigate to ${topic.screen}`);
         // Potentially navigate to other screens like FAQ, AppUsageGuide when they are created

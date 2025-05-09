@@ -1,50 +1,53 @@
-import React from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, ActivityIndicator, Alert, useColorScheme } from 'react-native';
 import { useTheme } from '../context/theme-context';
 import { ChevronLeft } from 'lucide-react-native';
+import { workoutApi } from '../services/api';
+import MarkdownDisplay from 'react-native-markdown-display';
 
-// Placeholder for Terms of Service content
-const termsContent = `
-最終更新日: YYYY年MM月DD日
-
-本利用規約（以下「本規約」といいます。）は、[あなたのアプリ名/サービス名]（以下「本サービス」といいます。）の利用条件を定めるものです。ユーザーの皆様（以下「ユーザー」といいます。）には、本規約に従って本サービスをご利用いただきます。
-
-第1条（適用）
-本規約は、ユーザーと当社との間の本サービスの利用に関わる一切の関係に適用されるものとします。
-
-第2条（利用登録）
-1. 本サービスにおいては、登録希望者が本規約に同意の上、当社の定める方法によって利用登録を申請し、当社がこれを承認することによって、利用登録が完了するものとします。
-2. 当社は、利用登録の申請者に以下の事由があると判断した場合、利用登録の申請を承認しないことがあり、その理由については一切の開示義務を負わないものとします。
-   （1）利用登録の申請に際して虚偽の事項を届け出た場合
-   （2）本規約に違反したことがある者からの申請である場合
-   （3）その他、当社が利用登録を相当でないと判断した場合
-
-第3条（ユーザーIDおよびパスワードの管理）
-1. ユーザーは、自己の責任において、本サービスのユーザーIDおよびパスワードを適切に管理するものとします。
-2. ユーザーは、いかなる場合にも、ユーザーIDおよびパスワードを第三者に譲渡または貸与し、もしくは第三者と共用することはできません。当社は、ユーザーIDとパスワードの組み合わせが登録情報と一致してログインされた場合には、そのユーザーIDを登録しているユーザー自身による利用とみなします。
-3. ユーザーID及びパスワードが第三者によって使用されたことによって生じた損害は、当社に故意又は重大な過失がある場合を除き、当社は一切の責任を負わないものとします。
-
-[...以下、必要な条項を追記してください...]
-
-第X条（免責事項）
-当社の債務不履行責任は、当社の故意または重過失によらない場合には免責されるものとします。
-
-第Y条（サービス内容の変更等）
-当社は、ユーザーに通知することなく、本サービスの内容を変更しまたは本サービスの提供を中止することができるものとし、これによってユーザーに生じた損害について一切の責任を負いません。
-
-第Z条（利用規約の変更）
-当社は、必要と判断した場合には、ユーザーに通知することなくいつでも本規約を変更することができるものとします。なお、本規約の変更後、本サービスの利用を開始した場合には、当該ユーザーは変更後の規約に同意したものとみなします。
-
-第W条（準拠法・裁判管轄）
-1. 本規約の解釈にあたっては、日本法を準拠法とします。
-2. 本サービスに関して紛争が生じた場合には、当社の本店所在地を管轄する裁判所を専属的合意管轄とします。
-
-以上
-`;
+// Placeholder for Terms of Service content - This will be replaced by fetched content
+// const termsContent = `...`; // Remove or comment out the hardcoded content
 
 export default function TermsOfServiceScreen({ navigation }) {
   const { colors } = useTheme();
-  // const textMutedColor = colors.textMuted || colors.text; // Not used in this screen currently
+  const colorScheme = useColorScheme();
+  const [termsContent, setTermsContent] = useState(''); // State for terms content
+  const [isLoading, setIsLoading] = useState(true); // State for loading status
+  const [error, setError] = useState<string | null>(null); // State for error status
+
+  useEffect(() => {
+    const fetchTerms = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        const response = await workoutApi.getTermsOfService();
+        if (response && typeof response.content === 'string') {
+          setTermsContent(response.content);
+        } else {
+          throw new Error('利用規約の形式が正しくありません。');
+        }
+      } catch (err: any) {
+        console.error('Failed to fetch terms of service:', err);
+        setError(err.message || '利用規約の取得に失敗しました。');
+        Alert.alert('エラー', err.message || '利用規約の取得に失敗しました。');
+      }
+      setIsLoading(false);
+    };
+
+    fetchTerms();
+  }, []); // Empty dependency array means this effect runs once on mount
+
+  // Define Markdown styles based on the current theme
+  const markdownStyles = StyleSheet.create({
+    body: { color: colors.text, fontSize: 15, lineHeight: 24 },
+    heading1: { color: colors.text, fontSize: 28, fontWeight: 'bold', marginTop: 20, marginBottom: 10, borderBottomWidth: 1, borderColor: colors.border, paddingBottom: 5 },
+    heading2: { color: colors.text, fontSize: 22, fontWeight: 'bold', marginTop: 18, marginBottom: 8 },
+    heading3: { color: colors.text, fontSize: 18, fontWeight: '600', marginTop: 16, marginBottom: 6 },
+    link: { color: colors.primary, textDecorationLine: 'underline' },
+    bullet_list_icon: { color: colors.text },
+    ordered_list_icon: { color: colors.text },
+    // Add more styles as needed for other Markdown elements (e.g., blockquote, code_block, etc.)
+  });
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
@@ -57,9 +60,15 @@ export default function TermsOfServiceScreen({ navigation }) {
       </View>
 
       <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-        <Text style={[styles.contentText, { color: colors.text }]}>
-          {termsContent}
-        </Text>
+        {isLoading ? (
+          <ActivityIndicator size="large" color={colors.primary} style={styles.loader} />
+        ) : error ? (
+          <Text style={[styles.errorText, { color: colors.error || 'red' }]}>{error}</Text>
+        ) : (
+          <MarkdownDisplay style={markdownStyles}>
+            {termsContent}
+          </MarkdownDisplay>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -72,6 +81,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: { // Style for the content inside ScrollView
     paddingVertical: 20, // Vertical padding for the text content
+    flexGrow: 1, // Ensure loader/error can be centered if content is short
   },
   header: {
     flexDirection: 'row',
@@ -92,8 +102,12 @@ const styles = StyleSheet.create({
   placeholder: {
     width: 24 + 16, 
   },
-  contentText: {
-    fontSize: 14,
-    lineHeight: 22,
+  loader: {
+    marginTop: 50, // Give some space from header
+  },
+  errorText: {
+    textAlign: 'center',
+    fontSize: 16,
+    padding: 20,
   },
 }); 
