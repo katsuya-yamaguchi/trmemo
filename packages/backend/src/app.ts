@@ -1,5 +1,5 @@
 // src/app.ts
-import express from 'express';
+import express, { Request, Response, NextFunction, ErrorRequestHandler } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import supabase from './config/database';  // データベースクライアントをインポート
@@ -29,12 +29,14 @@ app.get('/api/health', (req, res) => {
 });
 
 // エラーハンドリングミドルウェア
-app.use((err, req, res, next) => {
-  console.error(err.stack);
+const errorHandler: ErrorRequestHandler = (err, req: Request, res: Response, next: NextFunction) => {
+  console.error(err.stack); // err.stack は Error 型であれば存在
+  const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
   res.status(500).json({
     message: 'サーバーエラーが発生しました',
-    error: process.env.NODE_ENV === 'production' ? undefined : err.message
+    error: process.env.NODE_ENV === 'production' ? undefined : errorMessage
   });
-});
+};
+app.use(errorHandler);
 
 export default app;

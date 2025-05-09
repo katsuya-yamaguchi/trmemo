@@ -113,6 +113,18 @@ export const recordBodyStats = async (req: Request, res: Response) => {
   }
 };
 
+// Add type definitions for BodyStat and ChartData
+interface BodyStat {
+  recorded_date: string | Date;
+  weight: number;
+  // body_fat?: number; // Add if used, for example
+}
+
+interface ChartData {
+  labels: string[];
+  datasets: { data: number[] }[];
+}
+
 // ユーザーの体重履歴を取得
 export const getBodyStatsHistory = async (req: Request, res: Response) => {
   try {
@@ -178,7 +190,7 @@ export const getBodyStatsHistory = async (req: Request, res: Response) => {
 };
 
 // チャート用にデータを整形する関数
-const formatChartData = (data, period) => {
+const formatChartData = (data: BodyStat[], period: string): ChartData => {
   if (!data || data.length === 0) {
     return { labels: [], datasets: [{ data: [] }] };
   }
@@ -188,8 +200,8 @@ const formatChartData = (data, period) => {
     new Date(a.recorded_date).getTime() - new Date(b.recorded_date).getTime()
   );
 
-  let labels = [];
-  let values = [];
+  let labels: string[] = [];
+  let values: number[] = [];
 
   if (period === 'week') {
     // 週の場合は各日を表示

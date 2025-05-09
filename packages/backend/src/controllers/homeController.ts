@@ -3,6 +3,17 @@ import { Request, Response } from 'express';
 import supabase from '../config/database';
 import { HomeScreenData } from '../models/homeScreenModel';
 
+// Define the type for the exercise item
+interface UserDayExerciseItem {
+  exercise: {
+    name: string;
+  };
+  set_count: number;
+  rep_min: number;
+  rep_max: number;
+  // Add other properties from user_day_exercises if accessed elsewhere or for completeness
+}
+
 export class HomeController {
   async getHomeScreenData(req: Request, res: Response) {
   try {
@@ -49,7 +60,7 @@ export class HomeController {
     }
 
     // トレーニング種目から今日のワークアウト情報を生成
-    const exercises = todayTraining.user_day_exercises.map(exercise => ({
+    const exercises = todayTraining.user_day_exercises.map((exercise: UserDayExerciseItem) => ({
       name: exercise.exercise.name,
       sets: exercise.set_count,
       reps: `${exercise.rep_min}-${exercise.rep_max}`

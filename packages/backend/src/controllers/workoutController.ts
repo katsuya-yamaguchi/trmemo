@@ -677,7 +677,11 @@ export const getProgressData = async (req: Request, res: Response) => {
 
   } catch (error) {
     console.error(`Error fetching progress data (${req.query.dataType}, ${req.query.period}):`, error);
-    return res.status(500).json({ message: error.message || 'サーバーエラーが発生しました' });
+    let errorMessage = 'サーバーエラーが発生しました';
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+    return res.status(500).json({ message: errorMessage });
   }
 };
 
