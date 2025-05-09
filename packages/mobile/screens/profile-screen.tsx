@@ -4,14 +4,23 @@ import { useTheme } from "../context/theme-context"
 import { useAuth } from "../context/auth-context"
 import { Card } from "../components/ui/card"
 import { User, Bell, Moon, LogOut, ChevronRight, Shield, HelpCircle, FileText, Share2, UserCircle } from "lucide-react-native"
-import { useNavigation } from "@react-navigation/native"
+import { useNavigation, NavigationProp } from "@react-navigation/native"
+import { RootStackParamList } from "../types/navigation"
+
+// Предполагается, что где-то определен RootStackParamList
+// export type RootStackParamList = {
+//   AccountInfo: undefined;
+//   PrivacySettings: undefined;
+//   HelpSupport: undefined;
+//   // ... другие маршруты
+// };
 
 export default function ProfileScreen() {
   const { colors, isDarkMode, toggleTheme } = useTheme()
   const { user, signOut } = useAuth()
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
   const [reminderTime, setReminderTime] = useState("08:00")
-  const navigation = useNavigation()
+  const navigation = useNavigation<NavigationProp<RootStackParamList>>()
 
   const handleSignOut = async () => {
     Alert.alert("ログアウト", "ログアウトしてもよろしいですか？", [

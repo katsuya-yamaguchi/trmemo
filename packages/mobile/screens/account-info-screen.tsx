@@ -8,10 +8,9 @@ export default function AccountInfoScreen({ navigation }) {
   const { colors } = useTheme();
   const { user } = useAuth(); // Get user info from auth context
 
-  // Fallback for textDetail color. Accessing a potentially undefined property
   // directly in the style object can sometimes lead to issues with linters/compilers.
   // It's safer to resolve it to a variable first.
-  const textDetailColor = colors.textDetail ? colors.textDetail : colors.text;
+  const textDetailColor = colors.text; // Use colors.text directly as textDetail is not defined
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>

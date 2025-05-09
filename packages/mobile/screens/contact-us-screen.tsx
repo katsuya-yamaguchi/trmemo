@@ -7,7 +7,7 @@ const SUPPORT_EMAIL = 'support@example.com'; // Replace with your actual support
 
 export default function ContactUsScreen({ navigation }) {
   const { colors } = useTheme();
-  const textMutedColor = colors.textMuted ? colors.textMuted : colors.text; // Fallback for textMuted
+  const textMutedColor = colors.text; // Use colors.text directly as textMuted is not defined
 
   const handleEmailPress = async () => {
     const subject = 'アプリに関するお問い合わせ';

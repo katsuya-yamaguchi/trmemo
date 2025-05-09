@@ -106,7 +106,7 @@ export default function TrainingScreen() {
   if (error) {
     return (
       <SafeAreaView style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
-        <Text style={[styles.errorText, { color: colors.destructive }]}>エラー: {error}</Text>
+        <Text style={[styles.errorText, { color: colors.error }]}>エラー: {error}</Text>
         {/* TODO: リトライボタンなどを追加 */}
       </SafeAreaView>
     );

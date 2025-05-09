@@ -7,14 +7,50 @@ import { LineChart, BarChart } from "react-native-chart-kit"
 import { Calendar, Share2, ChevronDown, ChevronRight } from "lucide-react-native"
 import { workoutApi } from "../services/api"
 
+// Type definitions for state
+interface ChartDataset {
+  data: number[];
+  color?: (opacity: number) => string;
+  strokeWidth?: number;
+}
+
+interface ChartData {
+  labels: string[];
+  datasets: ChartDataset[];
+  legend?: string[];
+}
+
+interface WeightStats {
+  change: number;
+}
+
+interface StrengthStats {
+  maxWeights: { name: string; weight: number }[];
+}
+
+interface WorkoutCountStats {
+  total: number;
+  target: number;
+}
+
+type ProgressStats = WeightStats | StrengthStats | WorkoutCountStats | null;
+
+interface WorkoutHistoryItem {
+  id?: string; // Assuming id might exist for key or navigation
+  date: string;
+  title: string;
+  highlights: string;
+  exercises: number;
+}
+
 export default function ProgressScreen() {
   const { colors } = useTheme()
   const { user } = useAuth()
   const [activeTab, setActiveTab] = useState("weight") // 'weight', 'strength', 'workouts'
   const [timeRange, setTimeRange] = useState("month") // 'week', 'month', 'year'
-  const [chartData, setChartData] = useState(null)
-  const [stats, setStats] = useState(null)
-  const [workoutHistory, setWorkoutHistory] = useState([])
+  const [chartData, setChartData] = useState<ChartData | null>(null)
+  const [stats, setStats] = useState<ProgressStats>(null)
+  const [workoutHistory, setWorkoutHistory] = useState<WorkoutHistoryItem[]>([])
   const [loading, setLoading] = useState(true)
 
   const screenWidth = Dimensions.get("window").width - 40
@@ -99,6 +135,7 @@ export default function ProgressScreen() {
             chartConfig={chartConfig}
             style={styles.chart}
             yAxisSuffix="kg"
+            yAxisLabel=""
           />
         )
       case "workouts":
@@ -110,6 +147,7 @@ export default function ProgressScreen() {
             chartConfig={chartConfig}
             style={styles.chart}
             yAxisSuffix="回"
+            yAxisLabel=""
           />
         )
       default:
@@ -196,36 +234,36 @@ export default function ProgressScreen() {
           </Text>
           {renderChart()}
 
-          {stats && activeTab === "weight" && (
+          {stats && activeTab === "weight" && (stats as WeightStats).change !== undefined && (
             <View style={styles.highlightContainer}>
               <Text style={[styles.highlightLabel, { color: colors.text }]}>先月比:</Text>
               <Text 
                 style={[
                   styles.highlightValue, 
-                  { color: stats.change < 0 ? colors.success : colors.error }
+                  { color: (stats as WeightStats).change < 0 ? colors.success : colors.error }
                 ]}
               >
-                {stats.change > 0 ? '+' : ''}{stats.change}kg
+                {(stats as WeightStats).change > 0 ? '+' : ''}{(stats as WeightStats).change}kg
               </Text>
             </View>
           )}
 
-          {stats && activeTab === "strength" && stats.maxWeights && (
+          {stats && activeTab === "strength" && (stats as StrengthStats).maxWeights && (
             <View style={styles.highlightContainer}>
               <Text style={[styles.highlightLabel, { color: colors.text }]}>
-                {stats.maxWeights[0]?.name || 'ベンチプレス'}自己ベスト:
+                {(stats as StrengthStats).maxWeights[0]?.name || 'ベンチプレス'}自己ベスト:
               </Text>
               <Text style={[styles.highlightValue, { color: colors.primary }]}>
-                {stats.maxWeights[0]?.weight || 0}kg
+                {(stats as StrengthStats).maxWeights[0]?.weight || 0}kg
               </Text>
             </View>
           )}
 
-          {stats && activeTab === "workouts" && (
+          {stats && activeTab === "workouts" && (stats as WorkoutCountStats).total !== undefined && (
             <View style={styles.highlightContainer}>
               <Text style={[styles.highlightLabel, { color: colors.text }]}>今週のトレーニング:</Text>
               <Text style={[styles.highlightValue, { color: colors.primary }]}>
-                {stats.total}/{stats.target}回
+                {(stats as WorkoutCountStats).total}/{(stats as WorkoutCountStats).target}回
               </Text>
             </View>
           )}

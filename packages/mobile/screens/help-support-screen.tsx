@@ -14,7 +14,7 @@ const helpTopics = [
 
 export default function HelpSupportScreen({ navigation }) {
   const { colors } = useTheme();
-  const textMutedColor = colors.textMuted || colors.text; // Fallback for textMuted
+  const textMutedColor = colors.text; // Use colors.text directly as textMuted is not defined
 
   const handlePressTopic = (topic) => {
     if (topic.action) {

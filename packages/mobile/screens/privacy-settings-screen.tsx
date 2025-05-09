@@ -11,7 +11,7 @@ export default function PrivacySettingsScreen({ navigation }) {
   const [allowDataSharing, setAllowDataSharing] = useState(false);
   const [twoFactorAuth, setTwoFactorAuth] = useState(false);
 
-  const textMutedColor = colors.textMuted || colors.text; // Fallback for textMuted
+  const textMutedColor = colors.text; // Fallback for textMuted - use colors.text directly
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
