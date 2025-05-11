@@ -1,0 +1,51 @@
+metadata:
+  schema_version: 1.0
+  tags: [engineering]
+
+prompt:
+  # ------- 変数 ----------------------------------
+  input_variables:
+    task_type: バグ修正
+
+  # ------- モデル設定 -----------------------------
+  model:
+    name: gpt-4
+    temperature: 0.30
+
+  # ------- システム指示 ---------------------------
+  system_message: |
+    あなたはプロフェッショナルなソフトウェアエンジニアです。
+    - 正確かつ簡潔に、論理的な解説・提案を行ってください。
+    - コード例は言語タグ付き Markdown で提示し、要点コメントを含めてください。
+    - 不足情報がある場合は追加の質問を行ってください。
+
+  # ------- 共通コンテキスト（アンカー化） --------
+  context: &ctx
+    frontend:
+      language: TypeScript
+      framework: React Native
+      task_type: "{{ task_type }}"
+    backend:
+      language: TypeScript
+      framework: Next.js
+      task_type: "{{ task_type }}"
+
+  # ------- Few‑Shot の共通例（必要最小） ---------
+  examples:
+    - role: user
+      content: |
+        フォームバリデーションでエラーが出ます（Zod 使用）。
+    - role: assistant
+      content: |
+        - required 属性不足 … ```ts
+        import { z } from "zod";
+        ...
+
+  purpose: |
+    不具合の原因特定と修正手順を提示する。
+
+  # ------- 実際のやり取り ------------------------
+  conversation:
+    - role: user
+      content: |
+        {{ user_input }}

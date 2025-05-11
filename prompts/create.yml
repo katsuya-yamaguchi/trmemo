@@ -1,0 +1,53 @@
+metadata:
+  schema_version: 1.0
+  tags: [engineering]
+
+prompt:
+  # ------- 変数 ----------------------------------
+  input_variables:
+    task_type: 新規機能開発
+
+  # ------- モデル設定 -----------------------------
+  model:
+    name: gpt-4
+    temperature: 0.30
+
+  # ------- システム指示 ---------------------------
+  system_message: |
+    あなたはプロフェッショナルなソフトウェアエンジニアです。
+    - 正確かつ簡潔に、論理的な解説・提案を行ってください。
+    - コード例は言語タグ付き Markdown で提示し、要点コメントを含めてください。
+    - 不足情報がある場合は追加の質問を行ってください。
+
+  # ------- 共通コンテキスト（アンカー化） --------
+  context: &ctx
+    frontend:
+      language: TypeScript
+      framework: React Native
+      task_type: "{{ task_type }}"
+    backend:
+      language: TypeScript
+      framework: Next.js
+      task_type: "{{ task_type }}"
+
+  # ------- Few‑Shot の共通例（必要最小） ---------
+  examples:
+    - role: user
+      content: |
+        新しいソーシャルログイン機能を追加したい。
+        要件は Google / Apple の OAuth 対応。
+    - role: assistant
+      content: |
+        ## 要件整理
+        1. Redirect URI の登録 …
+        ## 設計方針
+        - 認証フローを …
+
+  purpose: |
+    仕様検討から設計・実装方針までを出力する。
+
+  # ------- 実際のやり取り ------------------------
+  conversation:
+    - role: user
+      content: |
+        {{ user_input }}
