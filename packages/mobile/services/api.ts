@@ -1,43 +1,73 @@
 // services/api.ts
 import Constants from 'expo-constants';
-import { supabase } from '../lib/supabase';
+import { Session, AuthError } from '@supabase/supabase-js';
+import { supabase, supabaseAnonKey, supabaseUrl } from '../lib/supabase';
 
 // APIのベースURL
-const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
+// const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
 
 // ヘルパー関数: APIリクエストの基本設定
-async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
-  // 認証トークンを取得
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
+const fetchWithAuth = async (path: string, options: RequestInit = {}) => {
+  console.log(`fetchWithAuth: Starting for path: ${path}`);
+  let session: Session | null = null;
+  let authError: AuthError | null = null;
+  let caughtError: unknown = null;
 
-  // デフォルトヘッダーを設定
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-    ...(options.headers || {})
-  };
-
-  // APIリクエストを実行
-  const response = await fetch(`${API_URL}${endpoint}`, {
-    ...options,
-    headers
-  });
-
-  // エラーチェック
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    throw new Error(errorData?.message || `API error: ${response.status}`);
+  try {
+    console.log("fetchWithAuth: Attempting supabase.auth.getSession()...");
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    session = sessionData?.session ?? null;
+    authError = sessionError;
+    console.log("fetchWithAuth: getSession() result:", { session: session ? 'Exists' : 'null', error: authError });
+  } catch (error) {
+    console.error("fetchWithAuth: CRITICAL - Error during getSession() call itself:", error);
+    caughtError = error;
   }
 
+  if (caughtError || authError || !session) {
+    console.error('fetchWithAuth: Session error, no session, or getSession failed. Throwing error...', 
+                  { caughtError, authError, sessionExists: !!session });
+    const errorMessage = caughtError ? 'セッション取得中に予期せぬエラー' : 
+                         authError ? `認証エラー: ${authError.message}` : 
+                         '認証が必要です (セッションなし)';
+    throw new Error(errorMessage);
+  }
+
+  console.log(`fetchWithAuth: Session acquired for user ${session.user.id}. Proceeding to fetch ${path}`);
+
+  const headers = {
+    ...options.headers,
+    'Authorization': `Bearer ${session.access_token}`,
+    'apikey': supabaseAnonKey,
+    'Content-Type': 'application/json'
+  };
+
+  const requestUrl = `${supabaseUrl}/functions/v1${path}`;
+  console.log("fetchWithAuth: Sending request to URL:", requestUrl);
+  console.log("fetchWithAuth: Sending headers:", JSON.stringify(headers, null, 2));
+
+  const response = await fetch(requestUrl, {
+    ...options,
+    headers,
+  });
+  console.log(`fetchWithAuth: Fetch response status: ${response.status} for ${path}`);
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: response.statusText }));
+    console.error(`fetchWithAuth: API Error for ${path}:`, { status: response.status, errorData });
+    throw new Error(errorData.message || `APIリクエストに失敗しました (Status: ${response.status})`);
+  }
+
+  console.log(`fetchWithAuth: Successfully fetched ${path}`);
   return response.json();
-}
+};
 
 // ホーム画面関連API
 export const homeApi = {
   // ホーム画面データの取得
-  getHomeScreenData: async (userId: string) => {
-    return fetchWithAuth(`/home?userId=${userId}`);
+  getHomeScreenData: async () => {
+    // パスを'/home'に変更し、クエリパラメータを削除
+    return fetchWithAuth(`/home`);
   }
 };
 

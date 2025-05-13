@@ -57,12 +57,19 @@ export default function HomeScreen() {
       
       try {
         setLoading(true)
-        const data = await homeApi.getHomeScreenData(user.id)
+        console.log("fetchHomeData: Calling homeApi.getHomeScreenData...");
+        const data = await homeApi.getHomeScreenData()
+        console.log("fetchHomeData: API call successful, setting data.");
         setHomeData(data)
       } catch (error) {
-        console.error("ホーム画面データ取得エラー:", error)
-        Alert.alert("エラー", "データの取得に失敗しました")
+        console.error("ホーム画面データ取得エラー (raw object):", error);
+        console.error("ホーム画面データ取得エラー (typeof):", typeof error);
+        console.error("ホーム画面データ取得エラー (message property):", error?.message);
+        console.error("ホーム画面データ取得エラー (toString):", error?.toString());
+        
+        Alert.alert("エラー", `データの取得に失敗しました: ${error?.message || '詳細不明'}`);
       } finally {
+        console.log("fetchHomeData: finally block reached.");
         setLoading(false)
       }
     }

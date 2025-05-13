@@ -12,8 +12,7 @@
     "dev": "npm run shared:build && concurrently \"npm run mobile\" \"npm run backend\""
   },
   "devDependencies": {
-    "concurrently": "^8.2.0"
-  },
-  "dependencies": {
+    "concurrently": "^8.2.0",
+    "supabase": "^2.22.12"
   }
 }
