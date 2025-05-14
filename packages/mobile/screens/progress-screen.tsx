@@ -62,7 +62,7 @@ export default function ProgressScreen() {
       
       try {
         setLoading(true)
-        const response = await workoutApi.getProgressData(user.id, activeTab, timeRange)
+        const response = await workoutApi.getProgressData(activeTab, timeRange)
         setChartData(response.chartData)
         setStats(response.stats)
       } catch (error) {

@@ -174,9 +174,12 @@ export const workoutApi = {
   },
 
   // 進捗データ取得
-  getProgressData: async (userId: string, dataType: string = 'weight', period: string = 'month') => {
-    // TODO: このエンドポイントもEdge Functionに移行する必要あり
-    return fetchWithAuth(`/workouts/progress?userId=${userId}&dataType=${dataType}&period=${period}`);
+  getProgressData: async (dataType: string = 'weight', period: string = 'month') => {
+    // userId は fetchWithAuth 内でセッションから取得されるため、引数からは削除
+    // エンドポイントを新しいEdge Function '/progress-data' に変更
+    // クエリパラメータ dataType と period を付加
+    const endpoint = `/progress-data?dataType=${dataType}&period=${period}`;
+    return fetchWithAuth(endpoint);
   },
 
   // トレーニング履歴取得
