@@ -43,6 +43,8 @@ interface HomeScreenData {
 }
 
 serve(async (req) => {
+  console.log('[exercises] Function invoked!', new Date().toISOString());
+  console.log(`[exercises] Request method: ${req.method}, URL: ${req.url}`);
   // OPTIONSリクエストに対するCORSプリフライト応答
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -161,7 +163,7 @@ serve(async (req) => {
       .eq('session.user_id', userId) // sessionテーブルのuser_idでフィルタ
       .eq('exercise_name', 'ベンチプレス') // 特定のエクササイズ名
       .order('weight', { ascending: false })
-      .order('session.start_time', { foreignTable: 'sessions', ascending: false }) // 最新のセッションから
+      .order('start_time', { foreignTable: 'session', ascending: false }) // 最新のセッションから
       .limit(1)
       .maybeSingle(); // データがない場合もエラーにしない
 

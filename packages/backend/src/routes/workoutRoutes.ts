@@ -6,8 +6,6 @@ import {
   recordExerciseSet,
   startTrainingSession,
   completeTrainingSession,
-  getExerciseLibrary,
-  getExerciseDetails,
   getProgressData,
   getWorkoutHistory
 } from '../controllers/workoutController';
@@ -26,8 +24,8 @@ router.post('/record', authenticateToken, recordExerciseSet);
 
 // エクササイズライブラリ関連
 // エクセサイズのライブラリであり、公開情報であるため認証不要
-router.get('/exercises', getExerciseLibrary);
-router.get('/exercises/:exerciseId', getExerciseDetails);
+// router.get('/exercises', getExerciseLibrary);
+// router.get('/exercises/:exerciseId', getExerciseDetails);
 
 // 進捗データ関連
 router.get('/progress', authenticateToken, getProgressData);

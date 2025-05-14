@@ -111,26 +111,30 @@ export const userApi = {
 // ワークアウト関連API
 export const workoutApi = {
   // トレーニングプラン取得
-  getTrainingPlan: async (userId: string) => {
-    return fetchWithAuth(`/workouts/plan?userId=${userId}`);
+  getTrainingPlan: async () => {
+    // TODO: このエンドポイントもEdge Functionに移行する必要あり
+    return fetchWithAuth(`/training-plan`);
   },
 
   // 特定の日のトレーニング詳細を取得
   getDayWorkout: async (dayId: string) => {
-    return fetchWithAuth(`/workouts/day/${dayId}`);
+    // TODO: このエンドポイントもEdge Functionに移行する必要あり
+    return fetchWithAuth(`/training-plan/day/${dayId}`);
   },
 
   // トレーニングセッション開始
-  startTrainingSession: async (userId: string, dayId: string) => {
-    return fetchWithAuth(`/workouts/session/start`, {
+  startTrainingSession: async (dayId: string) => {
+    // TODO: このエンドポイントもEdge Functionに移行する必要あり
+    return fetchWithAuth(`/training-session/start`, {
       method: 'POST',
-      body: JSON.stringify({ userId, dayId })
+      body: JSON.stringify({ dayId })
     });
   },
 
   // トレーニングセッション完了
   completeTrainingSession: async (sessionId: string) => {
-    return fetchWithAuth(`/workouts/session/complete`, {
+    // TODO: このエンドポイントもEdge Functionに移行する必要あり
+    return fetchWithAuth(`/training-session/complete`, {
       method: 'POST',
       body: JSON.stringify({ sessionId })
     });
@@ -138,15 +142,17 @@ export const workoutApi = {
 
   // エクササイズセット記録
   recordExerciseSet: async (sessionId: string, exerciseId: string, setNumber: number, weight: number, reps: number) => {
-    return fetchWithAuth(`/workouts/record`, {
+    // TODO: このエンドポイントもEdge Functionに移行する必要あり
+    return fetchWithAuth(`/training-session/record`, {
       method: 'POST',
       body: JSON.stringify({ sessionId, exerciseId, setNumber, weight, reps })
     });
   },
 
-  // エクササイズライブラリ取得
+  // エクササイズライブラリ取得 ★修正箇所
   getExerciseLibrary: async (category?: string, search?: string) => {
-    let endpoint = `/workouts/exercises`;
+    // ベースパスを Supabase Function のパスに変更
+    let endpoint = `/exercises`; 
     const params = new URLSearchParams();
     
     if (category) params.append('category', category);
@@ -155,29 +161,38 @@ export const workoutApi = {
     const queryString = params.toString();
     if (queryString) endpoint += `?${queryString}`;
     
+    // fetchWithAuth を使用 (apikeyヘッダーが必要なため)
     return fetchWithAuth(endpoint);
   },
 
-  // エクササイズ詳細取得
+  // エクササイズ詳細取得 ★修正箇所
   getExerciseDetails: async (exerciseId: string) => {
-    return fetchWithAuth(`/workouts/exercises/${exerciseId}`);
+    // ベースパスとパラメータ構造を Supabase Function のパスに変更
+    const endpoint = `/exercises/${exerciseId}`; 
+    // fetchWithAuth を使用 (apikeyヘッダーが必要なため)
+    return fetchWithAuth(endpoint);
   },
 
   // 進捗データ取得
   getProgressData: async (userId: string, dataType: string = 'weight', period: string = 'month') => {
+    // TODO: このエンドポイントもEdge Functionに移行する必要あり
     return fetchWithAuth(`/workouts/progress?userId=${userId}&dataType=${dataType}&period=${period}`);
   },
 
   // トレーニング履歴取得
   getWorkoutHistory: async (userId: string, limit: number = 5, offset: number = 0) => {
+    // TODO: このエンドポイントもEdge Functionに移行する必要あり
     return fetchWithAuth(`/workouts/history?userId=${userId}&limit=${limit}&offset=${offset}`);
   },
-
+  
+  // legal関連も修正が必要そうだが、今回はworkoutApiに集中
   getTermsOfService: async () => {
+    // TODO: 認証不要なら fetchWithAuth ではなく、apikey のみを付与するヘルパーを使うべき
     return fetchWithAuth('/legal/terms-of-service'); // No userId needed for public content
   },
 
   getPrivacyPolicy: async () => {
+    // TODO: 認証不要なら fetchWithAuth ではなく、apikey のみを付与するヘルパーを使うべき
     return fetchWithAuth('/legal/privacy-policy'); // No userId needed for public content
   },
   
