@@ -82,7 +82,7 @@ export default function ProgressScreen() {
       if (!user?.id) return
       
       try {
-        const history = await workoutApi.getWorkoutHistory(user.id, 5, 0)
+        const history = await workoutApi.getWorkoutHistory(5, 0)
         setWorkoutHistory(history)
       } catch (error) {
         console.error("ワークアウト履歴取得エラー:", error)

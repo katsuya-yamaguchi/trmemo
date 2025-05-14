@@ -183,9 +183,9 @@ export const workoutApi = {
   },
 
   // トレーニング履歴取得
-  getWorkoutHistory: async (userId: string, limit: number = 5, offset: number = 0) => {
-    // TODO: このエンドポイントもEdge Functionに移行する必要あり
-    return fetchWithAuth(`/workouts/history?userId=${userId}&limit=${limit}&offset=${offset}`);
+  getWorkoutHistory: async (limit: number = 5, offset: number = 0) => {
+    const endpoint = `/workout-history?limit=${limit}&offset=${offset}`;
+    return fetchWithAuth(endpoint);
   },
   
   // legal関連も修正が必要そうだが、今回はworkoutApiに集中

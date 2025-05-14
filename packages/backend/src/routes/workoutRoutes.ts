@@ -6,7 +6,6 @@ import {
   recordExerciseSet,
   startTrainingSession,
   completeTrainingSession,
-  getWorkoutHistory
 } from '../controllers/workoutController';
 import { authenticateToken } from '../middlewares/authMiddleware';
 
@@ -30,6 +29,6 @@ router.post('/record', authenticateToken, recordExerciseSet);
 // router.get('/progress', authenticateToken, getProgressData);
 
 // トレーニング履歴取得 (認証必要)
-router.get('/history', authenticateToken, getWorkoutHistory); // 認証ミドルウェアを追加
+// router.get('/history', authenticateToken, getWorkoutHistory);
 
 export default router;
