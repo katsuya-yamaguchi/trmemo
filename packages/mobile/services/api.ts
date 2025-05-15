@@ -74,36 +74,39 @@ export const homeApi = {
 // ユーザー関連API
 export const userApi = {
   // プロフィール取得
-  getProfile: async (userId: string) => {
-    return fetchWithAuth(`/users/profile?userId=${userId}`);
+  getProfile: async () => {
+    return fetchWithAuth(`/user-profile`);
   },
 
   // プロフィール更新
-  updateProfile: async (userId: string, profileData: any) => {
-    return fetchWithAuth(`/users/profile`, {
+  updateProfile: async (profileData: { name?: string; profile_image_url?: string }) => {
+    return fetchWithAuth(`/user-profile`, {
       method: 'PUT',
-      body: JSON.stringify({ userId, ...profileData })
+      body: JSON.stringify(profileData)
     });
   },
 
   // 体重・体組成記録
-  recordBodyStats: async (userId: string, stats: { weight: number, bodyFat?: number, date: Date }) => {
-    return fetchWithAuth(`/users/body-stats`, {
+  recordBodyStats: async (stats: { weight: number, bodyFat?: number, date: string }) => {
+    return fetchWithAuth(`/record-body-stats`, {
       method: 'POST',
-      body: JSON.stringify({ userId, ...stats })
+      body: JSON.stringify(stats)
     });
   },
 
   // 体重履歴取得
-  getBodyStatsHistory: async (userId: string, period: string = 'month') => {
-    return fetchWithAuth(`/users/body-stats?userId=${userId}&period=${period}`);
+  getBodyStatsHistory: async (period: string = 'month') => {
+    return fetchWithAuth(`/body-stats-history?period=${period}`);
   },
 
   // 通知設定更新
-  updateNotificationSettings: async (userId: string, settings: { enabled: boolean, reminderTime: string }) => {
-    return fetchWithAuth(`/users/notifications`, {
+  updateNotificationSettings: async (settings: { enabled: boolean, reminderTime?: string }) => {
+    return fetchWithAuth(`/notification-settings`, {
       method: 'PUT',
-      body: JSON.stringify({ userId, ...settings })
+      body: JSON.stringify({
+        enabled: settings.enabled,
+        reminder_time: settings.reminderTime
+      })
     });
   }
 };
@@ -190,13 +193,35 @@ export const workoutApi = {
   
   // legal関連も修正が必要そうだが、今回はworkoutApiに集中
   getTermsOfService: async () => {
-    // TODO: 認証不要なら fetchWithAuth ではなく、apikey のみを付与するヘルパーを使うべき
-    return fetchWithAuth('/legal/terms-of-service'); // No userId needed for public content
+    // 認証不要なため、直接fetchを使用し、apikeyをヘッダーに付与
+    const requestUrl = `${supabaseUrl}/functions/v1/legal/terms-of-service`;
+    const response = await fetch(requestUrl, {
+      headers: {
+        'apikey': supabaseAnonKey,
+        'Content-Type': 'application/json'
+      }
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: response.statusText }));
+      throw new Error(errorData.message || `APIリクエストに失敗しました (Status: ${response.status})`);
+    }
+    return response.json();
   },
 
   getPrivacyPolicy: async () => {
-    // TODO: 認証不要なら fetchWithAuth ではなく、apikey のみを付与するヘルパーを使うべき
-    return fetchWithAuth('/legal/privacy-policy'); // No userId needed for public content
+    // 認証不要なため、直接fetchを使用し、apikeyをヘッダーに付与
+    const requestUrl = `${supabaseUrl}/functions/v1/legal/privacy-policy`;
+    const response = await fetch(requestUrl, {
+      headers: {
+        'apikey': supabaseAnonKey,
+        'Content-Type': 'application/json'
+      }
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: response.statusText }));
+      throw new Error(errorData.message || `APIリクエストに失敗しました (Status: ${response.status})`);
+    }
+    return response.json();
   },
   
   // Example of how it might be structured if it was part of a user object or similar

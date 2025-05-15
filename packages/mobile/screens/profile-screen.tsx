@@ -1,19 +1,22 @@
-import { useState } from "react"
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, SafeAreaView } from "react-native"
+import { useState, useEffect } from "react"
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, SafeAreaView, ActivityIndicator, Image } from "react-native"
 import { useTheme } from "../context/theme-context"
 import { useAuth } from "../context/auth-context"
 import { Card } from "../components/ui/card"
 import { User, Bell, Moon, LogOut, ChevronRight, Shield, HelpCircle, FileText, Share2, UserCircle } from "lucide-react-native"
 import { useNavigation, NavigationProp } from "@react-navigation/native"
 import { RootStackParamList } from "../types/navigation"
+import { userApi } from "../services/api"
 
-// Предполагается, что где-то определен RootStackParamList
-// export type RootStackParamList = {
-//   AccountInfo: undefined;
-//   PrivacySettings: undefined;
-//   HelpSupport: undefined;
-//   // ... другие маршруты
-// };
+// APIから返されるプロファイルデータの型定義
+interface UserProfileData {
+  id: string;
+  email: string;
+  name: string | null;
+  profile_image_url: string | null;
+  // two_factor_enabled: boolean | null; // 必要なら追加
+  // created_at: string | null; // 必要なら追加
+}
 
 export default function ProfileScreen() {
   const { colors, isDarkMode, toggleTheme } = useTheme()
@@ -21,6 +24,31 @@ export default function ProfileScreen() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
   const [reminderTime, setReminderTime] = useState("08:00")
   const navigation = useNavigation<NavigationProp<RootStackParamList>>()
+
+  const [userProfile, setUserProfile] = useState<UserProfileData | null>(null)
+  const [loadingProfile, setLoadingProfile] = useState(true)
+
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      if (user) {
+        try {
+          setLoadingProfile(true)
+          const profileData = await userApi.getProfile()
+          setUserProfile(profileData)
+        } catch (error) {
+          console.error("Failed to fetch user profile:", error)
+          Alert.alert("エラー", "プロフィール情報の取得に失敗しました。")
+        } finally {
+          setLoadingProfile(false)
+        }
+      } else {
+        setLoadingProfile(false)
+        setUserProfile(null)
+      }
+    }
+
+    fetchUserProfile()
+  }, [user])
 
   const handleSignOut = async () => {
     Alert.alert("ログアウト", "ログアウトしてもよろしいですか？", [
@@ -80,6 +108,24 @@ export default function ProfileScreen() {
     ])
   }
 
+  const renderAvatar = () => {
+    if (loadingProfile) {
+      return <ActivityIndicator size="small" color="#fff" />
+    }
+    if (userProfile?.profile_image_url) {
+      return <Image source={{ uri: userProfile.profile_image_url }} style={styles.avatarImage} />
+    }
+    return <User size={30} color="#fff" />
+  }
+  
+  const displayName = loadingProfile 
+    ? (user?.email?.split("@")[0] || "ユーザー") 
+    : (userProfile?.name || userProfile?.email?.split("@")[0] || "ユーザー")
+
+  const displayEmail = loadingProfile 
+    ? (user?.email || "user@example.com") 
+    : (userProfile?.email || "user@example.com")
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView style={styles.container}>
@@ -90,15 +136,15 @@ export default function ProfileScreen() {
         <Card style={[styles.profileCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.profileHeader}>
             <View style={[styles.avatarContainer, { backgroundColor: colors.primary }]}>
-              <User size={30} color="#fff" />
+              {renderAvatar()}
             </View>
             <View style={styles.profileInfo}>
-              <Text style={[styles.userName, { color: colors.text }]}>{user?.email?.split("@")[0] || "ユーザー"}</Text>
-              <Text style={[styles.userEmail, { color: colors.text }]}>{user?.email || "user@example.com"}</Text>
+              <Text style={[styles.userName, { color: colors.text }]}>{displayName}</Text>
+              <Text style={[styles.userEmail, { color: colors.text }]}>{displayEmail}</Text>
             </View>
           </View>
-          <TouchableOpacity style={styles.editButton}>
-            <Text style={[styles.editButtonText, { color: colors.primary }]}>プロフィールを編集</Text>
+          <TouchableOpacity style={styles.editButton} onPress={() => navigation.navigate('AccountInfo')}>
+            <Text style={[styles.editButtonText, { color: colors.primary }]}>アカウント情報を表示</Text>
           </TouchableOpacity>
         </Card>
 
@@ -269,6 +315,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginRight: 15,
+    overflow: 'hidden', // 画像が丸く収まるように
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
   },
   profileInfo: {
     flex: 1,
