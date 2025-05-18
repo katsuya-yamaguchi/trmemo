@@ -19,6 +19,8 @@ async function getUserProfile(req: Request) {
     const token = authHeader.replace("Bearer ", "");
     const { data: { user: authUser }, error: authUserError } = await supabase.auth.getUser(token);
 
+    console.log("Auth user from token:", authUser);
+
     if (authUserError || !authUser) {
       console.error("User retrieval error:", authUserError);
       return new Response(JSON.stringify({ message: "認証されていません" }), {
@@ -27,28 +29,38 @@ async function getUserProfile(req: Request) {
       });
     }
     const userId = authUser.id;
+    // authUserの中身をログに出力させたい
+    console.log("Attempting to fetch profile for userId:", userId);
 
     // usersテーブルからプロフィール情報を取得
-    const { data: userProfile, error: profileError } = await supabase
+    const { data: userProfiles, error: profileError } = await supabase
       .from("users") // 'users' テーブルを指定
       .select("id, email, name, profile_image_url, two_factor_enabled, created_at")
-      .eq("id", userId)
-      .single();
+      .eq("id", userId);
+
+    console.log("userProfiles:", userProfiles);
 
     if (profileError) {
       console.error("Error fetching user profile:", profileError);
       return new Response(JSON.stringify({ message: "ユーザープロフィールの取得に失敗しました", error: profileError.message }), {
-        status: profileError.code === 'PGRST116' ? 404 : 500, // PGRST116は単一行が見つからない場合
+        status: 500, //  PGRST116以外のエラーの可能性もあるため、汎用的な500エラー
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
     
-    if (!userProfile) { 
+    if (!userProfiles || userProfiles.length === 0) { 
         return new Response(JSON.stringify({ message: "ユーザープロフィールが見つかりません" }), {
             status: 404,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
     }
+
+    // idで検索しているので通常は1行だが、念のため複数返ってきた場合の考慮（ログ出力し、最初の要素を使用）
+    if (userProfiles.length > 1) {
+        console.warn(`Multiple user profiles found for userId: ${userId}. Returning the first one.`);
+    }
+
+    const userProfile = userProfiles[0];
 
     return new Response(JSON.stringify(userProfile), {
       status: 200,
@@ -75,6 +87,8 @@ async function updateUserProfile(req: Request) {
     }
     const token = authHeader.replace("Bearer ", "");
     const { data: { user: authUser }, error: authUserError } = await supabase.auth.getUser(token);
+
+    console.log("Auth user from token:", authUser);
 
     if (authUserError || !authUser) {
       console.error("User update - authentication error:", authUserError);
@@ -140,6 +154,7 @@ serve(async (req) => {
   }
 
   const url = new URL(req.url);
+  console.log("Received request to:", url.pathname);
   if (url.pathname === '/user-profile' || url.pathname === '/user-profile/') {
     if (req.method === "GET") {
       return await getUserProfile(req);

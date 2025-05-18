@@ -40,7 +40,7 @@ async function getWorkoutHistory(req: Request) {
     // 1. ユーザーのトレーニングセッションを新しい順に取得 (ページネーション適用)
     const { data: sessions, error: sessionsError } = await supabase
       .from("sessions")
-      .select("id, start_time, duration, summary") // summary も取得するように変更
+      .select("id, start_time, duration") // summary を削除
       .eq("user_id", userId)
       .order("start_time", { ascending: false }) // 新しい順
       .range(offset, offset + limit - 1); // ページネーション
@@ -85,22 +85,19 @@ async function getWorkoutHistory(req: Request) {
     const formattedHistory = sessions.map(session => {
       const exerciseCount = exerciseCountMap.get(session.id) || 0; // マップから取得、なければ0
 
-      // ハイライトの準備 (session.summary があればそれを使う)
+      // ハイライトの準備 (session.summary が利用できなくなったため、"記録なし" 固定)
       let highlights = "記録なし";
-      if (session.summary && session.summary.top_exercise) {
-          const topEx = session.summary.top_exercise;
-          if (topEx.weight && topEx.reps) {
-            highlights = `${topEx.exercise_name} ${topEx.weight}kg x ${topEx.reps}回`;
-          } else if (topEx.reps) { //自重など
-            highlights = `${topEx.exercise_name} ${topEx.reps}回`;
-          } else {
-            highlights = topEx.exercise_name || "記録なし";
-          }
-      } else {
-          // summaryがない、またはtop_exerciseがない場合のフォールバック (ほとんど起こらないはず)
-          // 以前のロジックを参考に session_exercises から取得することも考えられるが、
-          // completeTrainingSession で summary が作られる前提なので、ここでは簡略化
-      }
+      // session.summary がSELECTされなくなったため、以下のロジックは実質的に機能しなくなります。
+      // if (session.summary && session.summary.top_exercise) {
+      //     const topEx = session.summary.top_exercise;
+      //     if (topEx.weight && topEx.reps) {
+      //       highlights = `${topEx.exercise_name} ${topEx.weight}kg x ${topEx.reps}回`;
+      //     } else if (topEx.reps) { //自重など
+      //       highlights = `${topEx.exercise_name} ${topEx.reps}回`;
+      //     } else {
+      //       highlights = topEx.exercise_name || "記録なし";
+      //     }
+      // }
 
 
       return {
