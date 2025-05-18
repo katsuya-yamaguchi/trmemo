@@ -1,25 +1,12 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.42.0";
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.42.0";
 import { corsHeaders } from "../_shared/cors.ts";
 
-const supabase = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_ANON_KEY")!,
-);
-
-async function getUserProfile(req: Request) {
+async function getUserProfile(req: Request, supabaseClientForRequest: SupabaseClient) {
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ message: "認証ヘッダーがありません" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user: authUser }, error: authUserError } = await supabase.auth.getUser(token);
+    const { data: { user: authUser }, error: authUserError } = await supabaseClientForRequest.auth.getUser();
 
-    console.log("Auth user from token:", authUser);
+    console.log("Auth user from token (in getUserProfile):", authUser);
 
     if (authUserError || !authUser) {
       console.error("User retrieval error:", authUserError);
@@ -29,12 +16,29 @@ async function getUserProfile(req: Request) {
       });
     }
     const userId = authUser.id;
-    // authUserの中身をログに出力させたい
-    console.log("Attempting to fetch profile for userId:", userId);
+    console.log("User ID from supabase.auth.getUser():", userId);
 
-    // usersテーブルからプロフィール情報を取得
-    const { data: userProfiles, error: profileError } = await supabase
-      .from("users") // 'users' テーブルを指定
+    try {
+      const { data: rpcAuthUid, error: rpcError } = await supabaseClientForRequest.rpc('get_current_session_auth_uid');
+      if (rpcError) {
+        console.error("Error calling RPC get_current_session_auth_uid:", rpcError);
+      } else {
+        console.log("auth.uid() from DB session (RPC get_current_session_auth_uid):", rpcAuthUid);
+        if (userId === rpcAuthUid) {
+          console.log("SUCCESS: userId from getUser() and rpcAuthUid ARE THE SAME.");
+        } else {
+          console.error("FAILURE: userId from getUser() and rpcAuthUid ARE DIFFERENT.");
+          console.error(`userId: ${userId}, rpcAuthUid: ${rpcAuthUid}`);
+        }
+      }
+    } catch (e) {
+      console.error("Exception during RPC call:", e);
+    }
+
+    console.log("Attempting to fetch profile for userId (variable used in .eq()):", userId);
+
+    const { data: userProfiles, error: profileError } = await supabaseClientForRequest
+      .from("users")
       .select("id, email, name, profile_image_url, two_factor_enabled, created_at")
       .eq("id", userId);
 
@@ -43,7 +47,7 @@ async function getUserProfile(req: Request) {
     if (profileError) {
       console.error("Error fetching user profile:", profileError);
       return new Response(JSON.stringify({ message: "ユーザープロフィールの取得に失敗しました", error: profileError.message }), {
-        status: 500, //  PGRST116以外のエラーの可能性もあるため、汎用的な500エラー
+        status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -55,11 +59,9 @@ async function getUserProfile(req: Request) {
         });
     }
 
-    // idで検索しているので通常は1行だが、念のため複数返ってきた場合の考慮（ログ出力し、最初の要素を使用）
     if (userProfiles.length > 1) {
         console.warn(`Multiple user profiles found for userId: ${userId}. Returning the first one.`);
     }
-
     const userProfile = userProfiles[0];
 
     return new Response(JSON.stringify(userProfile), {
@@ -76,19 +78,11 @@ async function getUserProfile(req: Request) {
   }
 }
 
-async function updateUserProfile(req: Request) {
+async function updateUserProfile(req: Request, supabaseClientForRequest: SupabaseClient) {
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ message: "認証ヘッダーがありません" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user: authUser }, error: authUserError } = await supabase.auth.getUser(token);
+    const { data: { user: authUser }, error: authUserError } = await supabaseClientForRequest.auth.getUser();
 
-    console.log("Auth user from token:", authUser);
+    console.log("Auth user from token (in updateUserProfile):", authUser);
 
     if (authUserError || !authUser) {
       console.error("User update - authentication error:", authUserError);
@@ -103,7 +97,6 @@ async function updateUserProfile(req: Request) {
     try {
         const body = await req.json();
         if (body.name !== undefined) updateData.name = body.name;
-        // profileImageUrlではなくprofile_image_urlをキーに修正
         if (body.profile_image_url !== undefined) updateData.profile_image_url = body.profile_image_url; 
     } catch (e) {
         return new Response(JSON.stringify({ message: "リクエストボディが不正です" }), {
@@ -119,7 +112,7 @@ async function updateUserProfile(req: Request) {
           });
     }
     
-    const { data: updatedProfile, error: updateError } = await supabase
+    const { data: updatedProfile, error: updateError } = await supabaseClientForRequest
       .from("users")
       .update({ ...updateData, updated_at: new Date().toISOString() })
       .eq("id", userId)
@@ -148,19 +141,34 @@ async function updateUserProfile(req: Request) {
   }
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) {
+    return new Response(JSON.stringify({ message: "認証ヘッダーがありません" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const supabaseClientForRequest = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { global: { headers: { Authorization: authHeader } } }
+  );
+
   const url = new URL(req.url);
-  console.log("Received request to:", url.pathname);
+  console.log("Received request to:", url.pathname, "with method:", req.method);
+
   if (url.pathname === '/user-profile' || url.pathname === '/user-profile/') {
     if (req.method === "GET") {
-      return await getUserProfile(req);
+      return await getUserProfile(req, supabaseClientForRequest);
     }
     if (req.method === "PUT") {
-      return await updateUserProfile(req);
+      return await updateUserProfile(req, supabaseClientForRequest);
     }
   }
   
