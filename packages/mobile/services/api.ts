@@ -190,7 +190,7 @@ export const workoutApi = {
     const endpoint = `/workout-history?limit=${limit}&offset=${offset}`;
     return fetchWithAuth(endpoint);
   },
-  
+
   // legal関連も修正が必要そうだが、今回はworkoutApiに集中
   getTermsOfService: async () => {
     // 認証不要なため、直接fetchを使用し、apikeyをヘッダーに付与

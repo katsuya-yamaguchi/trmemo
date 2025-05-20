@@ -40,5 +40,5 @@ export const getPrivacyPolicy = async (req: Request, res: Response) => {
     console.error('Error fetching privacy policy:', error);
     res.status(500).json({ message: 'プライバシーポリシーの取得中にエラーが発生しました。' });
   }
-};
+}; 
 */ 

@@ -1,21 +1,12 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
-import { corsHeaders } from '../_shared/cors.ts'; // CORSヘッダーは必要に応じて
+import { corsHeaders } from '../_shared/cors.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.42.0';
 
-// Helper function to read markdown file content from within the Function's directory
-const readLegalDocumentFromFunctionDir = async (filename: string): Promise<string> => {
-  try {
-    // Functions are typically executed from their own directory.
-    // Construct path relative to the function's root.
-    // e.g., if this function is in supabase/functions/legal/index.ts
-    // and documents are in supabase/functions/legal/legal_documents/
-    const filePath = new URL(`./legal_documents/${filename}`, import.meta.url).pathname;
-    const data = await Deno.readTextFile(filePath);
-    return data;
-  } catch (error) {
-    console.error(`Error reading file ${filename}:`, error);
-    throw new Error(`Failed to read ${filename}: ${error.message}`);
-  }
-};
+// 環境変数からSupabaseのURLとサービスロールキーを取得
+const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -23,19 +14,14 @@ serve(async (req) => {
   }
 
   const url = new URL(req.url);
-  let documentFilename = '';
-
-  // Determine which document to serve based on the path
-  // Example: /functions/v1/legal/terms-of-service
-  // The path segment after /legal/ will determine the document
   const pathSegments = url.pathname.split('/');
-  const action = pathSegments[pathSegments.length -1]; // last segment
+  const action = pathSegments[pathSegments.length - 1];
 
-  if (action === 'terms-of-service') {
-    documentFilename = 'terms_of_service.md';
-  } else if (action === 'privacy-policy') {
-    documentFilename = 'privacy_policy.md';
-  } else {
+  let type = '';
+  if (action === 'privacy-policy') type = 'privacy_policy';
+  if (action === 'terms-of-service') type = 'terms_of_service';
+
+  if (!type) {
     return new Response(JSON.stringify({ message: 'Not Found' }), {
       status: 404,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -43,16 +29,31 @@ serve(async (req) => {
   }
 
   try {
-    const content = await readLegalDocumentFromFunctionDir(documentFilename);
-    return new Response(JSON.stringify({ content }), {
+    const { data, error } = await supabase
+      .from('legal_documents')
+      .select('content')
+      .eq('document_type', type)
+      .order('published_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !data) {
+      return new Response(JSON.stringify({ message: 'Not Found' }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    return new Response(JSON.stringify({ content: data.content }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
   } catch (error) {
-    // Log the full error for server-side debugging
-    console.error(`Error serving document ${documentFilename}:`, error);
-    // Return a generic error message to the client
-    return new Response(JSON.stringify({ message: `文書 (${documentFilename}) の取得中にエラーが発生しました。`, error: error.message }), {
+    console.error(`Error serving document:`, error);
+    return new Response(JSON.stringify({ 
+      message: `文書の取得中にエラーが発生しました。`, 
+      error: error.message 
+    }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
