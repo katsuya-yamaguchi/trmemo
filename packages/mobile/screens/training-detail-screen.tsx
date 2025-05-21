@@ -47,15 +47,35 @@ export default function TrainingDetailScreen() {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
+  // ★★★ デバッグログ追加 (useEffectの外) ★★★
+  console.log('TrainingDetailScreen: user:', JSON.stringify(user, null, 2));
+  console.log('TrainingDetailScreen: workout:', JSON.stringify(workout, null, 2));
+
   // セッション開始
   useEffect(() => {
+    // ★★★ デバッグログ追加 (useEffectの直後) ★★★
+    console.log('TrainingDetailScreen useEffect triggered. user:', user, 'workout:', workout);
+
     const startSession = async () => {
-      if (!user?.id || !workout?.dayId) return
+      // ★★★ デバッグログ追加 (startSessionの冒頭) ★★★
+      console.log('startSession called. user?.id:', user?.id, 'workout?.dayId:', workout?.dayId);
+
+      if (!user?.id || !workout?.dayId) {
+        // ★★★ デバッグログ追加 (ガード節でreturnする場合) ★★★
+        console.log('startSession: user.id or workout.dayId is missing, returning early.');
+        return;
+      }
       
       try {
         setIsLoading(true)
-        const response = await workoutApi.startTrainingSession(user.id, workout.dayId)
-        setSessionId(response.session.id)
+        const response = await workoutApi.startTrainingSession(workout.dayId)
+        console.log('startSession response:', JSON.stringify(response, null, 2));
+        if (response && response.session) {
+          console.log('startSession sessionId:', response.session.id);
+          setSessionId(response.session.id);
+        } else {
+          console.error('startSession: response or response.session is missing');
+        }
       } catch (error) {
         console.error('セッション開始エラー:', error)
         Alert.alert('エラー', 'トレーニングセッションの開始に失敗しました')
@@ -82,6 +102,10 @@ export default function TrainingDetailScreen() {
   }, [isTimerRunning, timeLeft])
 
   const handleSetComplete = async (exerciseIndex, setIndex) => {
+    // ★★★ デバッグログ追加 ★★★
+    console.log('handleSetComplete - current sessionId:', sessionId);
+    // ★★★ ここまで ★★★
+
     if (!sessionId) {
       Alert.alert('エラー', 'セッションが開始されていません')
       return

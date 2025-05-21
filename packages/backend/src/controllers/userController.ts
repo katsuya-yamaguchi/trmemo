@@ -2,82 +2,11 @@
 import { Request, Response } from 'express';
 import supabase from '../config/database';
 
-// ユーザープロフィール情報を取得
-export const getUserProfile = async (req: Request, res: Response) => {
-  try {
-    const userId = req.query.userId as string;
+// ユーザープロフィールを更新 (この関数全体を削除)
+// export const updateUserProfile = async (req: Request, res: Response) => { ... };
 
-    if (!userId) {
-      return res.status(400).json({ message: 'ユーザーIDが必要です' });
-    }
-
-    // ユーザー情報を取得
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', userId)
-      .single();
-
-    if (userError) {
-      return res.status(404).json({ message: 'ユーザーが見つかりません', error: userError });
-    }
-
-    res.json({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      profileImageUrl: user.profile_image_url,
-      twoFactorEnabled: user.two_factor_enabled,
-      createdAt: user.created_at
-    });
-  } catch (error) {
-    console.error('ユーザープロフィール取得エラー:', error);
-    res.status(500).json({ message: 'サーバーエラー' });
-  }
-};
-
-// ユーザープロフィールを更新
-export const updateUserProfile = async (req: Request, res: Response) => {
-  try {
-    const userId = req.body.userId;
-    const { name, profileImageUrl } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({ message: 'ユーザーIDが必要です' });
-    }
-
-    // プロフィール情報を更新
-    const { data, error } = await supabase
-      .from('users')
-      .update({
-        name,
-        profile_image_url: profileImageUrl,
-        updated_at: new Date()
-      })
-      .eq('id', userId)
-      .select()
-      .single();
-
-    if (error) {
-      return res.status(400).json({ message: 'プロフィール更新に失敗しました', error });
-    }
-
-    res.json({
-      id: data.id,
-      email: data.email,
-      name: data.name,
-      profileImageUrl: data.profile_image_url,
-      twoFactorEnabled: data.two_factor_enabled,
-      createdAt: data.created_at,
-      updatedAt: data.updated_at
-    });
-  } catch (error) {
-    console.error('プロフィール更新エラー:', error);
-    res.status(500).json({ message: 'サーバーエラー' });
-  }
-};
-
-// ユーザーの体重・体組成データを記録
+// ユーザーの体重・体組成データを記録 // この関数全体を削除
+/*
 export const recordBodyStats = async (req: Request, res: Response) => {
   try {
     const { userId, weight, bodyFat, date } = req.body;
@@ -112,6 +41,7 @@ export const recordBodyStats = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'サーバーエラー' });
   }
 };
+*/
 
 // Add type definitions for BodyStat and ChartData
 interface BodyStat {
@@ -125,7 +55,8 @@ interface ChartData {
   datasets: { data: number[] }[];
 }
 
-// ユーザーの体重履歴を取得
+// ユーザーの体重履歴を取得 // この関数全体を削除またはコメントアウト
+/*
 export const getBodyStatsHistory = async (req: Request, res: Response) => {
   try {
     const userId = req.query.userId as string;
@@ -188,8 +119,10 @@ export const getBodyStatsHistory = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'サーバーエラー' });
   }
 };
+*/
 
-// チャート用にデータを整形する関数
+// チャート用にデータを整形する関数 // この関数全体を削除またはコメントアウト
+/*
 const formatChartData = (data: BodyStat[], period: string): ChartData => {
   if (!data || data.length === 0) {
     return { labels: [], datasets: [{ data: [] }] };
@@ -235,8 +168,10 @@ const formatChartData = (data: BodyStat[], period: string): ChartData => {
     ]
   };
 };
+*/
 
-// 通知設定を更新
+// 通知設定を更新 // この関数全体を削除またはコメントアウト
+/*
 export const updateNotificationSettings = async (req: Request, res: Response) => {
   try {
     const { userId, enabled, reminderTime } = req.body;
@@ -283,3 +218,4 @@ export const updateNotificationSettings = async (req: Request, res: Response) =>
     res.status(500).json({ message: 'サーバーエラー' });
   }
 };
+*/

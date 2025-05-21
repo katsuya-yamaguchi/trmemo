@@ -1,79 +1,112 @@
 // services/api.ts
 import Constants from 'expo-constants';
-import { supabase } from '../lib/supabase';
+import { Session, AuthError } from '@supabase/supabase-js';
+import { supabase, supabaseAnonKey, supabaseUrl } from '../lib/supabase';
 
 // APIのベースURL
-const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
+// const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
 
 // ヘルパー関数: APIリクエストの基本設定
-async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
-  // 認証トークンを取得
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
+const fetchWithAuth = async (path: string, options: RequestInit = {}) => {
+  console.log(`fetchWithAuth: Starting for path: ${path}`);
+  let session: Session | null = null;
+  let authError: AuthError | null = null;
+  let caughtError: unknown = null;
 
-  // デフォルトヘッダーを設定
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-    ...(options.headers || {})
-  };
-
-  // APIリクエストを実行
-  const response = await fetch(`${API_URL}${endpoint}`, {
-    ...options,
-    headers
-  });
-
-  // エラーチェック
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    throw new Error(errorData?.message || `API error: ${response.status}`);
+  try {
+    console.log("fetchWithAuth: Attempting supabase.auth.getSession()...");
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    session = sessionData?.session ?? null;
+    authError = sessionError;
+    console.log("fetchWithAuth: getSession() result:", { session: session ? 'Exists' : 'null', error: authError });
+  } catch (error) {
+    console.error("fetchWithAuth: CRITICAL - Error during getSession() call itself:", error);
+    caughtError = error;
   }
 
+  if (caughtError || authError || !session) {
+    console.error('fetchWithAuth: Session error, no session, or getSession failed. Throwing error...', 
+                  { caughtError, authError, sessionExists: !!session });
+    const errorMessage = caughtError ? 'セッション取得中に予期せぬエラー' : 
+                         authError ? `認証エラー: ${authError.message}` : 
+                         '認証が必要です (セッションなし)';
+    throw new Error(errorMessage);
+  }
+
+  console.log(`fetchWithAuth: Session acquired for user ${session.user.id}. Proceeding to fetch ${path}`);
+
+  const headers = {
+    ...options.headers,
+    'Authorization': `Bearer ${session.access_token}`,
+    'apikey': supabaseAnonKey,
+    'Content-Type': 'application/json'
+  };
+
+  const requestUrl = `${supabaseUrl}/functions/v1${path}`;
+  console.log("fetchWithAuth: Sending request to URL:", requestUrl);
+  console.log("fetchWithAuth: Sending headers:", JSON.stringify(headers, null, 2));
+
+  const response = await fetch(requestUrl, {
+    ...options,
+    headers,
+  });
+  console.log(`fetchWithAuth: Fetch response status: ${response.status} for ${path}`);
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: response.statusText }));
+    console.error(`fetchWithAuth: API Error for ${path}:`, { status: response.status, errorData });
+    throw new Error(errorData.message || `APIリクエストに失敗しました (Status: ${response.status})`);
+  }
+
+  console.log(`fetchWithAuth: Successfully fetched ${path}`);
   return response.json();
-}
+};
 
 // ホーム画面関連API
 export const homeApi = {
   // ホーム画面データの取得
-  getHomeScreenData: async (userId: string) => {
-    return fetchWithAuth(`/home?userId=${userId}`);
+  getHomeScreenData: async () => {
+    // パスを'/home'に変更し、クエリパラメータを削除
+    return fetchWithAuth(`/home`);
   }
 };
 
 // ユーザー関連API
 export const userApi = {
   // プロフィール取得
-  getProfile: async (userId: string) => {
-    return fetchWithAuth(`/users/profile?userId=${userId}`);
+  getProfile: async () => {
+    return fetchWithAuth(`/user-profile`);
   },
 
   // プロフィール更新
-  updateProfile: async (userId: string, profileData: any) => {
-    return fetchWithAuth(`/users/profile`, {
+  updateProfile: async (profileData: { name?: string; profile_image_url?: string }) => {
+    return fetchWithAuth(`/user-profile`, {
       method: 'PUT',
-      body: JSON.stringify({ userId, ...profileData })
+      body: JSON.stringify(profileData)
     });
   },
 
   // 体重・体組成記録
-  recordBodyStats: async (userId: string, stats: { weight: number, bodyFat?: number, date: Date }) => {
-    return fetchWithAuth(`/users/body-stats`, {
+  recordBodyStats: async (stats: { weight: number, bodyFat?: number, date: string }) => {
+    return fetchWithAuth(`/record-body-stats`, {
       method: 'POST',
-      body: JSON.stringify({ userId, ...stats })
+      body: JSON.stringify(stats)
     });
   },
 
   // 体重履歴取得
-  getBodyStatsHistory: async (userId: string, period: string = 'month') => {
-    return fetchWithAuth(`/users/body-stats?userId=${userId}&period=${period}`);
+  getBodyStatsHistory: async (period: string = 'month') => {
+    return fetchWithAuth(`/body-stats-history?period=${period}`);
   },
 
   // 通知設定更新
-  updateNotificationSettings: async (userId: string, settings: { enabled: boolean, reminderTime: string }) => {
-    return fetchWithAuth(`/users/notifications`, {
+  updateNotificationSettings: async (settings: { enabled: boolean, reminderTime?: string }) => {
+    return fetchWithAuth(`/notification-settings`, {
       method: 'PUT',
-      body: JSON.stringify({ userId, ...settings })
+      body: JSON.stringify({
+        enabled: settings.enabled,
+        reminder_time: settings.reminderTime
+      })
     });
   }
 };
@@ -81,26 +114,30 @@ export const userApi = {
 // ワークアウト関連API
 export const workoutApi = {
   // トレーニングプラン取得
-  getTrainingPlan: async (userId: string) => {
-    return fetchWithAuth(`/workouts/plan?userId=${userId}`);
+  getTrainingPlan: async () => {
+    // TODO: このエンドポイントもEdge Functionに移行する必要あり
+    return fetchWithAuth(`/training-plan`);
   },
 
   // 特定の日のトレーニング詳細を取得
   getDayWorkout: async (dayId: string) => {
-    return fetchWithAuth(`/workouts/day/${dayId}`);
+    // TODO: このエンドポイントもEdge Functionに移行する必要あり
+    return fetchWithAuth(`/training-plan/day/${dayId}`);
   },
 
   // トレーニングセッション開始
-  startTrainingSession: async (userId: string, dayId: string) => {
-    return fetchWithAuth(`/workouts/session/start`, {
+  startTrainingSession: async (dayId: string) => {
+    // TODO: このエンドポイントもEdge Functionに移行する必要あり
+    return fetchWithAuth(`/training-session/start`, {
       method: 'POST',
-      body: JSON.stringify({ userId, dayId })
+      body: JSON.stringify({ dayId })
     });
   },
 
   // トレーニングセッション完了
   completeTrainingSession: async (sessionId: string) => {
-    return fetchWithAuth(`/workouts/session/complete`, {
+    // TODO: このエンドポイントもEdge Functionに移行する必要あり
+    return fetchWithAuth(`/training-session/complete`, {
       method: 'POST',
       body: JSON.stringify({ sessionId })
     });
@@ -108,15 +145,17 @@ export const workoutApi = {
 
   // エクササイズセット記録
   recordExerciseSet: async (sessionId: string, exerciseId: string, setNumber: number, weight: number, reps: number) => {
-    return fetchWithAuth(`/workouts/record`, {
+    // TODO: このエンドポイントもEdge Functionに移行する必要あり
+    return fetchWithAuth(`/training-session/record`, {
       method: 'POST',
       body: JSON.stringify({ sessionId, exerciseId, setNumber, weight, reps })
     });
   },
 
-  // エクササイズライブラリ取得
+  // エクササイズライブラリ取得 ★修正箇所
   getExerciseLibrary: async (category?: string, search?: string) => {
-    let endpoint = `/workouts/exercises`;
+    // ベースパスを Supabase Function のパスに変更
+    let endpoint = `/exercises`; 
     const params = new URLSearchParams();
     
     if (category) params.append('category', category);
@@ -125,30 +164,64 @@ export const workoutApi = {
     const queryString = params.toString();
     if (queryString) endpoint += `?${queryString}`;
     
+    // fetchWithAuth を使用 (apikeyヘッダーが必要なため)
     return fetchWithAuth(endpoint);
   },
 
-  // エクササイズ詳細取得
+  // エクササイズ詳細取得 ★修正箇所
   getExerciseDetails: async (exerciseId: string) => {
-    return fetchWithAuth(`/workouts/exercises/${exerciseId}`);
+    // ベースパスとパラメータ構造を Supabase Function のパスに変更
+    const endpoint = `/exercises/${exerciseId}`; 
+    // fetchWithAuth を使用 (apikeyヘッダーが必要なため)
+    return fetchWithAuth(endpoint);
   },
 
   // 進捗データ取得
-  getProgressData: async (userId: string, dataType: string = 'weight', period: string = 'month') => {
-    return fetchWithAuth(`/workouts/progress?userId=${userId}&dataType=${dataType}&period=${period}`);
+  getProgressData: async (dataType: string = 'weight', period: string = 'month') => {
+    // userId は fetchWithAuth 内でセッションから取得されるため、引数からは削除
+    // エンドポイントを新しいEdge Function '/progress-data' に変更
+    // クエリパラメータ dataType と period を付加
+    const endpoint = `/progress-data?dataType=${dataType}&period=${period}`;
+    return fetchWithAuth(endpoint);
   },
 
   // トレーニング履歴取得
-  getWorkoutHistory: async (userId: string, limit: number = 5, offset: number = 0) => {
-    return fetchWithAuth(`/workouts/history?userId=${userId}&limit=${limit}&offset=${offset}`);
+  getWorkoutHistory: async (limit: number = 5, offset: number = 0) => {
+    const endpoint = `/workout-history?limit=${limit}&offset=${offset}`;
+    return fetchWithAuth(endpoint);
   },
 
+  // legal関連も修正が必要そうだが、今回はworkoutApiに集中
   getTermsOfService: async () => {
-    return fetchWithAuth('/legal/terms-of-service'); // No userId needed for public content
+    // 認証不要なため、直接fetchを使用し、apikeyをヘッダーに付与
+    const requestUrl = `${supabaseUrl}/functions/v1/legal/terms-of-service`;
+    const response = await fetch(requestUrl, {
+      headers: {
+        'apikey': supabaseAnonKey,
+        'Content-Type': 'application/json'
+      }
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: response.statusText }));
+      throw new Error(errorData.message || `APIリクエストに失敗しました (Status: ${response.status})`);
+    }
+    return response.json();
   },
 
   getPrivacyPolicy: async () => {
-    return fetchWithAuth('/legal/privacy-policy'); // No userId needed for public content
+    // 認証不要なため、直接fetchを使用し、apikeyをヘッダーに付与
+    const requestUrl = `${supabaseUrl}/functions/v1/legal/privacy-policy`;
+    const response = await fetch(requestUrl, {
+      headers: {
+        'apikey': supabaseAnonKey,
+        'Content-Type': 'application/json'
+      }
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: response.statusText }));
+      throw new Error(errorData.message || `APIリクエストに失敗しました (Status: ${response.status})`);
+    }
+    return response.json();
   },
   
   // Example of how it might be structured if it was part of a user object or similar

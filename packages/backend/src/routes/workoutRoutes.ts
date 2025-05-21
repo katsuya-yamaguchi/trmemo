@@ -6,10 +6,6 @@ import {
   recordExerciseSet,
   startTrainingSession,
   completeTrainingSession,
-  getExerciseLibrary,
-  getExerciseDetails,
-  getProgressData,
-  getWorkoutHistory
 } from '../controllers/workoutController';
 import { authenticateToken } from '../middlewares/authMiddleware';
 
@@ -26,13 +22,13 @@ router.post('/record', authenticateToken, recordExerciseSet);
 
 // エクササイズライブラリ関連
 // エクセサイズのライブラリであり、公開情報であるため認証不要
-router.get('/exercises', getExerciseLibrary);
-router.get('/exercises/:exerciseId', getExerciseDetails);
+// router.get('/exercises', getExerciseLibrary);
+// router.get('/exercises/:exerciseId', getExerciseDetails);
 
 // 進捗データ関連
-router.get('/progress', authenticateToken, getProgressData);
+// router.get('/progress', authenticateToken, getProgressData);
 
 // トレーニング履歴取得 (認証必要)
-router.get('/history', authenticateToken, getWorkoutHistory); // 認証ミドルウェアを追加
+// router.get('/history', authenticateToken, getWorkoutHistory);
 
 export default router;

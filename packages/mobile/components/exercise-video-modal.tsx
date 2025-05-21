@@ -44,7 +44,7 @@ export default function ExerciseVideoModal({ isVisible, onClose, exercise }: Exe
 
             <View style={styles.tipsContainer}>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>トレーニングのコツ</Text>
-              {exercise.tips.map((tip, index) => (
+              {(exercise.tips ?? []).map((tip, index) => (
                 <View key={index} style={styles.tipItem}>
                   <View style={[styles.tipBullet, { backgroundColor: colors.primary }]} />
                   <Text style={[styles.tipText, { color: colors.text }]}>{tip}</Text>

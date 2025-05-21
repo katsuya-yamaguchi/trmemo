@@ -5,8 +5,8 @@ import { AppState } from "react-native"
 import Constants from "expo-constants"
 
 // Replace with your Supabase URL and anon key
-const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl || ''
-const supabaseAnonKey = Constants.expoConfig?.extra?.supabaseAnonKey || ''
+export const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl || ''
+export const supabaseAnonKey = Constants.expoConfig?.extra?.supabaseAnonKey || ''
 console.log(`supabaseUrl: ${supabaseUrl}`)
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
