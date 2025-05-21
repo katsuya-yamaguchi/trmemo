@@ -145,7 +145,6 @@ serve(async (req) => {
         .insert({
           user_id: userId, // 認証済みユーザーIDを使用
           start_time: new Date().toISOString(),
-          // created_at, updated_at はDBのデフォルトまたはトリガーで設定される想定
         })
         .select()
         .single();
@@ -156,23 +155,25 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 });
       }
 
-      // セッションとトレーニング日を関連付け
+      // セッションとトレーニング日を関連付け (★修正箇所)
       const { error: relationError } = await supabaseClient
-        .from('session_training_days')
+        .from('session_to_training_day_links') // テーブル名を修正
         .insert({
           session_id: newSession.id,
-          training_day_id: body.dayId,
+          user_training_day_id: body.dayId, // カラム名を修正
         });
 
       if (relationError) {
-        // ここで作成したセッションをロールバックする処理も考慮できるが、まずはエラーを返す
-        console.error('[training-session] Error associating session with training day:', relationError);
-        return new Response(JSON.stringify({ message: 'セッションの関連付けに失敗しました', error: relationError.message }), {
+        console.error('[training-session] Error associating session with training day (raw object):', JSON.stringify(relationError, null, 2));
+        if (relationError.details) console.error('[training-session] Error details:', relationError.details);
+        if (relationError.hint) console.error('[training-session] Error hint:', relationError.hint);
+        
+        return new Response(JSON.stringify({ message: 'セッションの関連付けに失敗しました', error: relationError.message || 'Unknown association error' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 });
       }
 
       return new Response(JSON.stringify({ message: 'トレーニングセッションを開始しました', session: newSession }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 201 }); // 201 Created がより適切
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 201 });
     }
 
     // POST /training-session/complete
@@ -229,19 +230,18 @@ serve(async (req) => {
       }
 
       const { data: recordedSet, error: setError } = await supabaseClient
-        .from('user_exercise_sets') // テーブル名が正しいか確認
+        .from('user_exercise_sets')
         .insert({
           session_id: body.sessionId,
-          exercise_id: body.exerciseId, // カラム名が exerciseId か exercise_id か確認
+          exercise_id: body.exerciseId,
           set_number: body.setNumber,
           weight: body.weight,
           reps: body.reps,
-          user_id: userId, // 認証ユーザーIDも記録
-          // rpe: body.rpe, // 必要なら追加
-          // notes: body.notes, // 必要なら追加
+          user_id: userId,
+          completed_at: new Date().toISOString(),
         })
         .select()
-        .single(); // 1件の挿入なのでsingle()でも良いが、複数件insertの場合は不要
+        .single();
 
       if (setError || !recordedSet) {
         console.error('[training-session] Error recording exercise set:', setError);

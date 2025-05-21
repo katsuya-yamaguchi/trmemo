@@ -61,7 +61,7 @@ export default function TrainingScreen() {
       setLoading(true);
       setError(null);
       try {
-        const data: TrainingPlan = await workoutApi.getTrainingPlan(user.id);
+        const data: TrainingPlan = await workoutApi.getTrainingPlan();
         // day_number でソートしておく
         if (data && data.trainingDays) {
             data.trainingDays.sort((a, b) => a.day_number - b.day_number);
@@ -88,8 +88,14 @@ export default function TrainingScreen() {
        title: day.title,
        day: `Day ${day.day_number}`,
        program: trainingPlan.name,
-       exercises: day.exercises.map(ex => ({ name: ex.name, sets: ex.sets, reps: ex.reps })),
-       duration: `${day.estimated_duration}分`
+       exercises: day.exercises.map(ex => ({
+         id: ex.id,
+         name: ex.name,
+         sets: ex.sets,
+         reps: ex.reps
+       })),
+       duration: `${day.estimated_duration}分`,
+       dayId: day.id,
      };
      navigation.navigate("TrainingDetail", { workout: workoutDataForDetail });
   };
