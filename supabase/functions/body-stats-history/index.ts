@@ -3,7 +3,7 @@ import { corsHeaders } from '../_shared/cors.ts';
 import { supabaseAdmin } from '../_shared/supabaseAdmin.ts';
 
 interface BodyStat {
-  recorded_date: string | Date; // DBからは文字列としてくる想定
+  recorded_at: string | Date; // DBからは文字列としてくる想定
   weight: number;
   // body_fat?: number; // 必要であれば
 }
@@ -21,7 +21,7 @@ const formatChartData = (data: BodyStat[], period: string): ChartData => {
 
   // 日付でソート (昇順)
   const sortedData = [...data].sort((a, b) =>
-    new Date(a.recorded_date).getTime() - new Date(b.recorded_date).getTime()
+    new Date(a.recorded_at).getTime() - new Date(b.recorded_at).getTime()
   );
 
   let labels: string[] = [];
@@ -30,7 +30,7 @@ const formatChartData = (data: BodyStat[], period: string): ChartData => {
   if (period === 'week') {
     // 週の場合は各日を表示
     sortedData.forEach(entry => {
-      const date = new Date(entry.recorded_date);
+      const date = new Date(entry.recorded_at);
       // DenoでのtoLocaleDateStringの挙動を確認、必要であれば調整
       labels.push(date.toLocaleDateString('ja-JP', { weekday: 'short' }));
       values.push(entry.weight);
@@ -38,14 +38,14 @@ const formatChartData = (data: BodyStat[], period: string): ChartData => {
   } else if (period === 'month') {
     // 月の場合は日を表示 (例: 7/15)
     sortedData.forEach(entry => {
-      const date = new Date(entry.recorded_date);
+      const date = new Date(entry.recorded_at);
       labels.push(`${date.getMonth() + 1}/${date.getDate()}`);
       values.push(entry.weight);
     });
   } else { // year
     // 年の場合は月を表示 (例: 7月)
     sortedData.forEach(entry => {
-      const date = new Date(entry.recorded_date);
+      const date = new Date(entry.recorded_at);
       labels.push(`${date.getMonth() + 1}月`);
       values.push(entry.weight);
     });
@@ -104,12 +104,12 @@ serve(async (req) => {
 
     // 体重履歴を取得
     const { data: historyData, error: dbError } = await supabaseAdmin
-      .from('user_body_stats')
+      .from('body_stats')
       .select('*')
       .eq('user_id', user.id)
-      .gte('recorded_date', startDate.toISOString().split('T')[0]) // YYYY-MM-DD
-      .lte('recorded_date', endDate.toISOString().split('T')[0])   // YYYY-MM-DD
-      .order('recorded_date', { ascending: false });
+      .gte('recorded_at', startDate.toISOString())
+      .lte('recorded_at', endDate.toISOString())
+      .order('recorded_at', { ascending: false });
 
     if (dbError) {
       console.error('体重履歴の取得に失敗しました:', dbError);
@@ -124,7 +124,7 @@ serve(async (req) => {
     let weightChange = null;
 
     if (historyData && historyData.length > 0) {
-      // recorded_date で降順ソート済みなので、最初が最新
+      // recorded_at で降順ソート済みなので、最初が最新
       currentWeight = historyData[0].weight;
       // 期間内の最も古いデータ（配列の最後）を開始体重とする
       startWeight = historyData[historyData.length - 1].weight;

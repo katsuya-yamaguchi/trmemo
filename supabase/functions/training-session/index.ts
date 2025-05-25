@@ -73,6 +73,10 @@ async function createSessionSummary(supabaseClient: SupabaseClient, sessionId: s
   let totalVolume = sets.reduce((sum, set) => sum + (set.weight || 0) * (set.reps || 0), 0);
   let maxWeight = Math.max(...sets.map(set => set.weight || 0));
 
+  // セッション内で実行されたユニークな種目数を計算
+  const uniqueExerciseIds = new Set(sets.map(set => set.exercise_id));
+  const totalDistinctExercises = uniqueExerciseIds.size;
+
   const summaryData = {
     session_id: sessionId,
     user_id: sessionData.user_id,
@@ -80,6 +84,7 @@ async function createSessionSummary(supabaseClient: SupabaseClient, sessionId: s
     total_reps: totalReps,
     total_volume: totalVolume,
     max_weight_lifted: maxWeight,
+    total_distinct_exercises: totalDistinctExercises,
   };
 
   const { error: summaryInsertError } = await supabaseClient
@@ -89,7 +94,7 @@ async function createSessionSummary(supabaseClient: SupabaseClient, sessionId: s
   if (summaryInsertError) {
     console.error(`[helper:createSessionSummary] Error inserting session summary for ${sessionId}:`, summaryInsertError);
   }
-  console.log(`[training-session] Session summary created/updated for session: ${sessionId}`);
+  console.log(`[training-session] Session summary created/updated for session: ${sessionId} with ${totalDistinctExercises} distinct exercises`);
 }
 
 

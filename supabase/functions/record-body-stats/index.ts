@@ -51,13 +51,12 @@ serve(async (req) => {
     }
 
     const { data: insertData, error: insertError } = await supabaseAdmin
-      .from('user_body_stats')
+      .from('body_stats')
       .insert({
         user_id: user.id,
         weight,
-        body_fat, // Will be null if not provided
-        recorded_date: recordedDate.toISOString(), // Store as ISO string
-        created_at: new Date().toISOString(),
+        body_fat_percentage: body_fat,
+        recorded_at: recordedDate.toISOString(),
       })
       .select()
       .single();

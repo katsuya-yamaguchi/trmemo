@@ -5,7 +5,8 @@ import { useTheme } from '../context/theme-context';
 import { useAuth } from '../context/auth-context';
 import { workoutApi } from '../services/api';
 import { Card } from '../components/ui/card';
-import { Calendar, ChevronRight, Dumbbell } from 'lucide-react-native';
+import { Button } from '../components/ui/button';
+import { Calendar, ChevronRight, Dumbbell, Edit2, Trash2, MoreVertical } from 'lucide-react-native';
 
 // --- 型定義 (バックエンドのレスポンスに合わせる) ---
 type ExerciseDetail = {
@@ -34,6 +35,7 @@ type TrainingPlan = {
 type RootStackParamList = {
   Training: undefined;
   TrainingDetail: { workout: any }; // TrainingDetail に渡す型を調整する必要あり
+  CreateTrainingPlan: { plan?: TrainingPlan }; // プランは任意
 };
 // --- ここまで型定義 ---
 
@@ -100,6 +102,65 @@ export default function TrainingScreen() {
      navigation.navigate("TrainingDetail", { workout: workoutDataForDetail });
   };
 
+  // プラン削除
+  const handleDeletePlan = () => {
+    if (!trainingPlan) return;
+
+    Alert.alert(
+      "プランの削除",
+      "このトレーニングプランを削除してもよろしいですか？",
+      [
+        {
+          text: "キャンセル",
+          style: "cancel"
+        },
+        {
+          text: "削除",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await workoutApi.deleteTrainingPlan(trainingPlan.id);
+              setTrainingPlan(null);
+              Alert.alert("完了", "トレーニングプランを削除しました");
+            } catch (error) {
+              console.error("プラン削除エラー:", error);
+              Alert.alert("エラー", "トレーニングプランの削除に失敗しました");
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // プラン編集
+  const handleEditPlan = () => {
+    if (!trainingPlan) return;
+    navigation.navigate("CreateTrainingPlan", { plan: trainingPlan });
+  };
+
+  // メニューを表示
+  const showMenu = () => {
+    Alert.alert(
+      "プランの管理",
+      "実行したい操作を選択してください",
+      [
+        {
+          text: "編集",
+          onPress: handleEditPlan
+        },
+        {
+          text: "削除",
+          style: "destructive",
+          onPress: handleDeletePlan
+        },
+        {
+          text: "キャンセル",
+          style: "cancel"
+        }
+      ]
+    );
+  };
+
   // --- ローディングとエラー表示 ---
   if (loading) {
     return (
@@ -121,8 +182,13 @@ export default function TrainingScreen() {
   if (!trainingPlan) {
       return (
           <SafeAreaView style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
-              <Text style={[{ color: colors.text }]}>トレーニングプランが見つかりません。</Text>
-              {/* TODO: プラン作成への導線などを追加 */}
+              <Text style={[{ color: colors.text, marginBottom: 16 }]}>トレーニングプランが見つかりません。</Text>
+              <Button
+                onPress={() => navigation.navigate("CreateTrainingPlan")}
+                style={{ paddingHorizontal: 24 }}
+              >
+                プランを作成する
+              </Button>
           </SafeAreaView>
       );
   }
@@ -142,6 +208,9 @@ export default function TrainingScreen() {
           <Text style={[styles.title, { color: colors.text }]}>トレーニングプラン</Text>
           <View style={styles.programInfo}>
             <Text style={[styles.programTitle, { color: colors.text }]}>{trainingPlan.name}</Text>
+            <TouchableOpacity onPress={showMenu} style={styles.menuButton}>
+              <MoreVertical size={20} color={colors.text} />
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -424,6 +493,9 @@ const styles = StyleSheet.create({
   errorText: {
       fontSize: 16,
       textAlign: 'center',
+  },
+  menuButton: {
+    padding: 8,
   },
 })
 
