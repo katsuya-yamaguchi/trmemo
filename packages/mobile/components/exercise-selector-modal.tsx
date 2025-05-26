@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -27,6 +27,8 @@ const EXERCISE_TYPES = [
   { id: "other", name: "その他" },
 ] as const;
 
+console.log('EXERCISE_TYPES defined:', EXERCISE_TYPES);
+
 type Props = {
   visible: boolean;
   onClose: () => void;
@@ -35,6 +37,10 @@ type Props = {
 
 export default function ExerciseSelectorModal({ visible, onClose, onSelect }: Props) {
   const { colors } = useTheme();
+  
+  // デバッグ用：colorsの内容を確認
+  console.log('ExerciseSelectorModal colors:', colors);
+  
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,8 +50,13 @@ export default function ExerciseSelectorModal({ visible, onClose, onSelect }: Pr
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
+  // デバッグ用：selectedTypeの変更を監視
+  useEffect(() => {
+    console.log(`selectedType changed to: ${selectedType}`);
+  }, [selectedType]);
+
   // 種目一覧を取得
-  const fetchExercises = async (isLoadMore = false) => {
+  const fetchExercises = useCallback(async (isLoadMore = false) => {
     try {
       if (isLoadMore) {
         setLoadingMore(true);
@@ -84,16 +95,34 @@ export default function ExerciseSelectorModal({ visible, onClose, onSelect }: Pr
       setLoading(false);
       setLoadingMore(false);
     }
-  };
+  }, [selectedType, searchQuery]);
 
-  // 検索条件変更時に再取得
+  // モーダルが開かれた時の初期化処理
   useEffect(() => {
+    if (visible) {
+      // 状態をリセット（selectedTypeは除く）
+      setSearchQuery("");
+      setPage(1);
+      setHasMore(true);
+      setLoadingMore(false);
+      setError(null);
+      setLoading(true);
+      
+      // 初回データ取得
+      fetchExercises();
+    }
+  }, [visible, fetchExercises]);
+
+  // 検索条件変更時に再取得（モーダルが表示されている時のみ）
+  useEffect(() => {
+    if (!visible) return;
+    
     const timer = setTimeout(() => {
       fetchExercises();
     }, 300); // デバウンス処理
 
     return () => clearTimeout(timer);
-  }, [selectedType, searchQuery]);
+  }, [selectedType, searchQuery, visible, fetchExercises]);
 
   // 無限スクロール
   const handleLoadMore = () => {
@@ -102,16 +131,31 @@ export default function ExerciseSelectorModal({ visible, onClose, onSelect }: Pr
     }
   };
 
+  // モーダルを閉じる処理
+  const handleClose = () => {
+    // 状態をリセット（selectedTypeは保持）
+    setSearchQuery("");
+    setExercises([]);
+    setPage(1);
+    setHasMore(true);
+    setLoadingMore(false);
+    setError(null);
+    setLoading(true);
+    onClose();
+  };
+
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.background, justifyContent: 'flex-start' }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+        {/* ヘッダー */}
         <View style={styles.header}>
           <Text style={[styles.title, { color: colors.text }]}>種目を選択</Text>
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+          <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
             <X size={24} color={colors.text} />
           </TouchableOpacity>
         </View>
 
+        {/* 検索バー */}
         <View style={[styles.searchContainer, { backgroundColor: colors.card }]}>
           <Search size={20} color={colors.text} style={{ marginRight: 8 }} />
           <TextInput
@@ -123,44 +167,55 @@ export default function ExerciseSelectorModal({ visible, onClose, onSelect }: Pr
           />
         </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.typeSelector}
-          contentContainerStyle={styles.typeSelectorContent}
-        >
-          {EXERCISE_TYPES.map((type) => (
-            <TouchableOpacity
-              key={type.id}
-              style={[
-                styles.typeButton,
-                selectedType === type.id && { backgroundColor: colors.primary },
-                { borderColor: colors.border }
-              ]}
-              onPress={() => setSelectedType(type.id)}
-            >
-              <Text
-                style={[
-                  styles.typeButtonText,
-                  { color: selectedType === type.id ? "#fff" : colors.text }
-                ]}
-              >
-                {type.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        {/* 種目タイプボタン */}
+        <View style={styles.typeSelectorContainer}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.typeSelector}
+            contentContainerStyle={styles.typeSelectorContent}
+          >
+            {EXERCISE_TYPES.map((type) => {
+              console.log(`Rendering type button: ${type.name}, selected: ${selectedType === type.id}`);
+              return (
+                <TouchableOpacity
+                  key={type.id}
+                  style={[
+                    styles.typeButton,
+                    selectedType === type.id && { backgroundColor: colors.primary },
+                    { borderColor: colors.border || '#E5E5E5' }
+                  ]}
+                  onPress={() => {
+                    console.log(`Type button pressed: ${type.id}, current selectedType: ${selectedType}`);
+                    setSelectedType(type.id);
+                    console.log(`selectedType will be set to: ${type.id}`);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.typeButtonText,
+                      { color: selectedType === type.id ? "#fff" : colors.text }
+                    ]}
+                  >
+                    {type.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
 
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={colors.primary} />
-          </View>
-        ) : error ? (
-          <View style={styles.errorContainer}>
-            <Text style={[styles.errorText, { color: colors.error }]}>{error}</Text>
-          </View>
-        ) : (
-          <View style={styles.listContainer}>
+        {/* 種目一覧 */}
+        <View style={styles.contentContainer}>
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+          ) : error ? (
+            <View style={styles.errorContainer}>
+              <Text style={[styles.errorText, { color: colors.error }]}>{error}</Text>
+            </View>
+          ) : (
             <FlatList
               data={exercises}
               keyExtractor={(item) => item.id}
@@ -209,8 +264,8 @@ export default function ExerciseSelectorModal({ visible, onClose, onSelect }: Pr
                 </TouchableOpacity>
               )}
             />
-          </View>
-        )}
+          )}
+        </View>
       </SafeAreaView>
     </Modal>
   );
@@ -248,17 +303,22 @@ const styles = StyleSheet.create({
     padding: 0,
     marginLeft: 8,
   },
+  typeSelectorContainer: {
+    paddingHorizontal: 0,
+    marginBottom: 8,
+  },
   typeSelector: {
-    marginBottom: 0,
+    height: 50,
   },
   typeSelectorContent: {
     paddingHorizontal: 16,
-    paddingVertical: 0,
+    paddingVertical: 8,
+    alignItems: 'center',
   },
   typeButton: {
     paddingHorizontal: 14,
-    paddingVertical: 0,
-    height: 32,
+    paddingVertical: 8,
+    height: 40,
     borderRadius: 12,
     marginRight: 8,
     borderWidth: 1.5,
@@ -270,11 +330,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "500",
   },
+  contentContainer: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
   listContainer: {
     minHeight: 300,
   },
   listContent: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 0,
     paddingVertical: 8,
   },
   exerciseItem: {

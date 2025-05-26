@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, ActivityIndicator, Alert } from 'react-native';
-import { useNavigation, NavigationProp } from '@react-navigation/native';
+import { useNavigation, NavigationProp, useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../context/theme-context';
 import { useAuth } from '../context/auth-context';
 import { workoutApi } from '../services/api';
@@ -50,37 +50,39 @@ export default function TrainingScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // --- useEffect でデータを取得 ---
-  useEffect(() => {
-    const fetchTrainingPlan = async () => {
-      if (!user?.id) {
-        // ユーザーIDがない場合はエラー状態にしてローディング終了
-        setError("ユーザー認証情報が見つかりません。");
-        setLoading(false);
-        return;
-      }
+  // --- useFocusEffect でデータを取得 ---
+  const fetchTrainingPlan = useCallback(async () => {
+    if (!user?.id) {
+      // ユーザーIDがない場合はエラー状態にしてローディング終了
+      setError("ユーザー認証情報が見つかりません。");
+      setLoading(false);
+      return;
+    }
 
-      setLoading(true);
-      setError(null);
-      try {
-        const data: TrainingPlan = await workoutApi.getTrainingPlan();
-        // day_number でソートしておく
-        if (data && data.trainingDays) {
-            data.trainingDays.sort((a, b) => a.day_number - b.day_number);
-        }
-        setTrainingPlan(data);
-      } catch (err: any) {
-        console.error("Failed to fetch training plan:", err);
-        const errorMessage = err.message || "トレーニングプランの取得に失敗しました";
-        setError(errorMessage);
-        Alert.alert("エラー", errorMessage);
-      } finally {
-        setLoading(false);
+    setLoading(true);
+    setError(null);
+    try {
+      const data: TrainingPlan = await workoutApi.getTrainingPlan();
+      // day_number でソートしておく
+      if (data && data.trainingDays) {
+          data.trainingDays.sort((a, b) => a.day_number - b.day_number);
       }
-    };
+      setTrainingPlan(data);
+    } catch (err: any) {
+      console.error("Failed to fetch training plan:", err);
+      const errorMessage = err.message || "トレーニングプランの取得に失敗しました";
+      setError(errorMessage);
+      Alert.alert("エラー", errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
 
-    fetchTrainingPlan();
-  }, [user]); // user が変更された場合 (ログイン/ログアウト時など) に再取得
+  useFocusEffect(
+    useCallback(() => {
+      fetchTrainingPlan();
+    }, [fetchTrainingPlan])
+  );
 
   // トレーニング詳細画面への遷移関数
   const navigateToWorkout = (day: TrainingDay) => {
@@ -184,7 +186,7 @@ export default function TrainingScreen() {
           <SafeAreaView style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
               <Text style={[{ color: colors.text, marginBottom: 16 }]}>トレーニングプランが見つかりません。</Text>
               <Button
-                onPress={() => navigation.navigate("CreateTrainingPlan")}
+                onPress={() => navigation.navigate("CreateTrainingPlan", {})}
                 style={{ paddingHorizontal: 24 }}
               >
                 プランを作成する
@@ -199,7 +201,6 @@ export default function TrainingScreen() {
   const activeDay = trainingPlan.trainingDays[activeTab];
   // 休息日かどうかを判定 (例: exercises が空 or title が "休息日")
   const isRestDay = !activeDay || activeDay.exercises.length === 0 || activeDay.title.includes("休息日");
-
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>

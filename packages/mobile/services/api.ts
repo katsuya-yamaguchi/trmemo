@@ -116,8 +116,17 @@ export const userApi = {
 export const workoutApi = {
   // トレーニングプラン取得
   getTrainingPlan: async () => {
-    // TODO: このエンドポイントもEdge Functionに移行する必要あり
-    return fetchWithAuth(`/training-plan`);
+    // まず全プランを取得
+    const plans = await fetchWithAuth(`/training-plan`);
+    
+    // プランが存在しない場合はnullを返す
+    if (!plans || plans.length === 0) {
+      return null;
+    }
+    
+    // 最新のプラン（最初のプラン）の詳細を取得
+    const latestPlan = plans[0];
+    return fetchWithAuth(`/training-plan/${latestPlan.id}`);
   },
 
   // トレーニングプラン作成

@@ -43,6 +43,22 @@ function assignDummyTips(exerciseName: string): string[] {
         baseTips[(startIndex + 1) % baseTips.length]
     ];
 }
+
+// データベースの種目データをモバイルアプリの形式に変換
+function formatExerciseForMobile(dbExercise: any) {
+  return {
+    id: dbExercise.id,
+    name: dbExercise.name,
+    type: dbExercise.type,
+    imageUrl: dbExercise.image_url || 'https://via.placeholder.com/90x90?text=No+Image',
+    description: dbExercise.description || '説明はありません。',
+    targetMuscles: dbExercise.target_muscles || [],
+    difficulty: dbExercise.difficulty || 'beginner',
+    equipment: dbExercise.equipment || [],
+    created_at: dbExercise.created_at,
+    updated_at: dbExercise.updated_at
+  };
+}
 // --- ヘルパー関数ここまで ---
 
 console.log("Hello from Exercises!");
@@ -98,9 +114,12 @@ serve(async (req) => {
       throw error;
     }
 
+    // データをモバイルアプリの形式に変換
+    const formattedExercises = exercises ? exercises.map(formatExerciseForMobile) : [];
+
     // レスポンスの作成
     const response = {
-      exercises,
+      exercises: formattedExercises,
       total: count || 0,
     };
 
