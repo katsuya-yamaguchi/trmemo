@@ -6,7 +6,6 @@ import {
   Modal,
   TouchableOpacity,
   FlatList,
-  Image,
   ActivityIndicator,
   SafeAreaView,
   TextInput,
@@ -245,18 +244,17 @@ export default function ExerciseSelectorModal({ visible, onClose, onSelect }: Pr
                   style={[styles.exerciseItem, { backgroundColor: colors.card }]}
                   onPress={() => onSelect(item)}
                 >
-                  <Image
-                    source={{ uri: item.imageUrl }}
-                    style={styles.exerciseImage}
-                    resizeMode="cover"
-                  />
                   <View style={styles.exerciseInfo}>
-                    <Text style={[styles.exerciseName, { color: colors.text }]}>
-                      {item.name}
-                    </Text>
-                    <Text style={[styles.exerciseType, { color: colors.text + "80" }]}>
-                      {EXERCISE_TYPES.find(t => t.id === item.type)?.name || "その他"}
-                    </Text>
+                    <View style={styles.exerciseHeader}>
+                      <Text style={[styles.exerciseName, { color: colors.text }]}>
+                        {item.name}
+                      </Text>
+                      <View style={[styles.exerciseTypeTag, { backgroundColor: colors.primary + '20', borderColor: colors.primary + '40' }]}>
+                        <Text style={[styles.exerciseTypeText, { color: colors.primary }]}>
+                          {EXERCISE_TYPES.find(t => t.id === item.type)?.name || "その他"}
+                        </Text>
+                      </View>
+                    </View>
                     <Text style={[styles.exerciseDescription, { color: colors.text + "80" }]}>
                       {item.description}
                     </Text>
@@ -342,7 +340,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   exerciseItem: {
-    flexDirection: "row",
     borderRadius: 12,
     marginBottom: 16,
     overflow: "visible",
@@ -356,23 +353,35 @@ const styles = StyleSheet.create({
     shadowRadius: 3.84,
     elevation: 3,
   },
-  exerciseImage: {
-    width: 90,
-    height: 90,
-    borderTopLeftRadius: 12,
-    borderBottomLeftRadius: 12,
-  },
   exerciseInfo: {
     flex: 1,
-    padding: 14,
+    padding: 16,
+  },
+  exerciseHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
   },
   exerciseName: {
     fontSize: 16,
     fontWeight: "600",
-    marginBottom: 4,
+    flex: 1,
+    marginRight: 8,
   },
-  exerciseType: {
-    fontSize: 14,
+  exerciseTypeTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  exerciseTypeText: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  exerciseDescription: {
+    fontSize: 12,
+    lineHeight: 16,
   },
   loadingContainer: {
     minHeight: 200,
@@ -390,11 +399,6 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 16,
     textAlign: "center",
-  },
-  exerciseDescription: {
-    fontSize: 12,
-    marginTop: 4,
-    lineHeight: 16,
   },
   emptyContainer: {
     flex: 1,
