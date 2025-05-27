@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, ActivityIndicator, Alert } from 'react-native';
-import { useNavigation, NavigationProp } from '@react-navigation/native';
+import { useNavigation, NavigationProp, useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../context/theme-context';
 import { useAuth } from '../context/auth-context';
 import { workoutApi } from '../services/api';
 import { Card } from '../components/ui/card';
-import { Calendar, ChevronRight, Dumbbell } from 'lucide-react-native';
+import { Button } from '../components/ui/button';
+import { Calendar, ChevronRight, Dumbbell, Edit2 } from 'lucide-react-native';
 
 // --- 型定義 (バックエンドのレスポンスに合わせる) ---
 type ExerciseDetail = {
@@ -34,6 +35,7 @@ type TrainingPlan = {
 type RootStackParamList = {
   Training: undefined;
   TrainingDetail: { workout: any }; // TrainingDetail に渡す型を調整する必要あり
+  CreateTrainingPlan: { plan?: TrainingPlan }; // プランは任意
 };
 // --- ここまで型定義 ---
 
@@ -48,37 +50,39 @@ export default function TrainingScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // --- useEffect でデータを取得 ---
-  useEffect(() => {
-    const fetchTrainingPlan = async () => {
-      if (!user?.id) {
-        // ユーザーIDがない場合はエラー状態にしてローディング終了
-        setError("ユーザー認証情報が見つかりません。");
-        setLoading(false);
-        return;
-      }
+  // --- useFocusEffect でデータを取得 ---
+  const fetchTrainingPlan = useCallback(async () => {
+    if (!user?.id) {
+      // ユーザーIDがない場合はエラー状態にしてローディング終了
+      setError("ユーザー認証情報が見つかりません。");
+      setLoading(false);
+      return;
+    }
 
-      setLoading(true);
-      setError(null);
-      try {
-        const data: TrainingPlan = await workoutApi.getTrainingPlan();
-        // day_number でソートしておく
-        if (data && data.trainingDays) {
-            data.trainingDays.sort((a, b) => a.day_number - b.day_number);
-        }
-        setTrainingPlan(data);
-      } catch (err: any) {
-        console.error("Failed to fetch training plan:", err);
-        const errorMessage = err.message || "トレーニングプランの取得に失敗しました";
-        setError(errorMessage);
-        Alert.alert("エラー", errorMessage);
-      } finally {
-        setLoading(false);
+    setLoading(true);
+    setError(null);
+    try {
+      const data: TrainingPlan = await workoutApi.getTrainingPlan();
+      // day_number でソートしておく
+      if (data && data.trainingDays) {
+          data.trainingDays.sort((a, b) => a.day_number - b.day_number);
       }
-    };
+      setTrainingPlan(data);
+    } catch (err: any) {
+      console.error("Failed to fetch training plan:", err);
+      const errorMessage = err.message || "トレーニングプランの取得に失敗しました";
+      setError(errorMessage);
+      Alert.alert("エラー", errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
 
-    fetchTrainingPlan();
-  }, [user]); // user が変更された場合 (ログイン/ログアウト時など) に再取得
+  useFocusEffect(
+    useCallback(() => {
+      fetchTrainingPlan();
+    }, [fetchTrainingPlan])
+  );
 
   // トレーニング詳細画面への遷移関数
   const navigateToWorkout = (day: TrainingDay) => {
@@ -98,6 +102,12 @@ export default function TrainingScreen() {
        dayId: day.id,
      };
      navigation.navigate("TrainingDetail", { workout: workoutDataForDetail });
+  };
+
+  // プラン編集
+  const handleEditPlan = () => {
+    if (!trainingPlan) return;
+    navigation.navigate("CreateTrainingPlan", { plan: trainingPlan });
   };
 
   // --- ローディングとエラー表示 ---
@@ -121,8 +131,13 @@ export default function TrainingScreen() {
   if (!trainingPlan) {
       return (
           <SafeAreaView style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
-              <Text style={[{ color: colors.text }]}>トレーニングプランが見つかりません。</Text>
-              {/* TODO: プラン作成への導線などを追加 */}
+              <Text style={[{ color: colors.text, marginBottom: 16 }]}>トレーニングプランが見つかりません。</Text>
+              <Button
+                onPress={() => navigation.navigate("CreateTrainingPlan", {})}
+                style={{ paddingHorizontal: 24 }}
+              >
+                プランを作成する
+              </Button>
           </SafeAreaView>
       );
   }
@@ -134,7 +149,6 @@ export default function TrainingScreen() {
   // 休息日かどうかを判定 (例: exercises が空 or title が "休息日")
   const isRestDay = !activeDay || activeDay.exercises.length === 0 || activeDay.title.includes("休息日");
 
-
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView style={styles.container}>
@@ -142,6 +156,10 @@ export default function TrainingScreen() {
           <Text style={[styles.title, { color: colors.text }]}>トレーニングプラン</Text>
           <View style={styles.programInfo}>
             <Text style={[styles.programTitle, { color: colors.text }]}>{trainingPlan.name}</Text>
+            <TouchableOpacity onPress={handleEditPlan} style={[styles.editButton, { backgroundColor: colors.primary }]}>
+              <Edit2 size={16} color="#fff" />
+              <Text style={styles.editButtonText}>編集</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -272,10 +290,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    marginTop: 4,
   },
   programTitle: {
     fontSize: 16,
     fontWeight: "500",
+    flex: 1,
+    marginRight: 12,
   },
   tabsContainer: {
     marginBottom: 20,
@@ -424,6 +445,19 @@ const styles = StyleSheet.create({
   errorText: {
       fontSize: 16,
       textAlign: 'center',
+  },
+  editButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 8,
+  },
+  editButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+    marginLeft: 4,
   },
 })
 

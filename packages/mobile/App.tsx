@@ -22,6 +22,7 @@ import HelpSupportScreen from './screens/help-support-screen'
 import ContactUsScreen from './screens/contact-us-screen'
 import TermsOfServiceScreen from './screens/terms-of-service-screen'
 import PrivacyPolicyScreen from './screens/privacy-policy-screen'
+import CreateTrainingPlanScreen from './screens/create-training-plan-screen'
 
 // Context
 import { AuthProvider, useAuth } from "./context/auth-context"
@@ -110,6 +111,15 @@ function AppNavigator() {
             options={{
               headerShown: true,
               title: "トレーニング詳細",
+              headerBackTitle: "戻る",
+            }}
+          />
+          <Stack.Screen
+            name="CreateTrainingPlan"
+            component={CreateTrainingPlanScreen}
+            options={{
+              headerShown: true,
+              title: "トレーニングプラン作成",
               headerBackTitle: "戻る",
             }}
           />

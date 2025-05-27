@@ -2,6 +2,7 @@
 import Constants from 'expo-constants';
 import { Session, AuthError } from '@supabase/supabase-js';
 import { supabase, supabaseAnonKey, supabaseUrl } from '../lib/supabase';
+import { Exercise, ExerciseLibraryResponse, TrainingPlan } from '../types/exercise';
 
 // APIのベースURL
 // const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
@@ -115,14 +116,54 @@ export const userApi = {
 export const workoutApi = {
   // トレーニングプラン取得
   getTrainingPlan: async () => {
-    // TODO: このエンドポイントもEdge Functionに移行する必要あり
-    return fetchWithAuth(`/training-plan`);
+    // まず全プランを取得
+    const plans = await fetchWithAuth(`/training-plan`);
+    
+    // プランが存在しない場合はnullを返す
+    if (!plans || plans.length === 0) {
+      return null;
+    }
+    
+    // 最新のプラン（最初のプラン）の詳細を取得
+    const latestPlan = plans[0];
+    return fetchWithAuth(`/training-plan/${latestPlan.id}`);
+  },
+
+  // トレーニングプラン作成
+  createTrainingPlan: async (planData: Omit<TrainingPlan, 'id' | 'created_at' | 'updated_at'>) => {
+    return fetchWithAuth(`/training-plan/create`, {
+      method: 'POST',
+      body: JSON.stringify(planData)
+    });
+  },
+
+  // トレーニングプラン編集
+  updateTrainingPlan: async (planId: string, planData: Partial<TrainingPlan>) => {
+    return fetchWithAuth(`/training-plan/${planId}`, {
+      method: 'PUT',
+      body: JSON.stringify(planData)
+    });
+  },
+
+  // トレーニングプラン削除
+  deleteTrainingPlan: async (planId: string) => {
+    return fetchWithAuth(`/training-plan/${planId}`, {
+      method: 'DELETE'
+    });
   },
 
   // 特定の日のトレーニング詳細を取得
   getDayWorkout: async (dayId: string) => {
     // TODO: このエンドポイントもEdge Functionに移行する必要あり
     return fetchWithAuth(`/training-plan/day/${dayId}`);
+  },
+
+  // 特定の日のトレーニング内容を更新
+  updateDayWorkout: async (dayId: string, dayData: { title: string; estimated_duration: number; exercises: any[] }) => {
+    return fetchWithAuth(`/training-plan/day/${dayId}`, {
+      method: 'PUT',
+      body: JSON.stringify(dayData)
+    });
   },
 
   // トレーニングセッション開始
@@ -152,27 +193,26 @@ export const workoutApi = {
     });
   },
 
-  // エクササイズライブラリ取得 ★修正箇所
-  getExerciseLibrary: async (category?: string, search?: string) => {
-    // ベースパスを Supabase Function のパスに変更
-    let endpoint = `/exercises`; 
+  // エクササイズライブラリ取得
+  getExerciseLibrary: async (
+    category?: string,
+    search?: string,
+    page: number = 1,
+    limit: number = 20
+  ): Promise<ExerciseLibraryResponse> => {
     const params = new URLSearchParams();
-    
     if (category) params.append('category', category);
     if (search) params.append('search', search);
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
     
-    const queryString = params.toString();
-    if (queryString) endpoint += `?${queryString}`;
-    
-    // fetchWithAuth を使用 (apikeyヘッダーが必要なため)
+    const endpoint = `/exercises?${params.toString()}`;
     return fetchWithAuth(endpoint);
   },
 
-  // エクササイズ詳細取得 ★修正箇所
-  getExerciseDetails: async (exerciseId: string) => {
-    // ベースパスとパラメータ構造を Supabase Function のパスに変更
-    const endpoint = `/exercises/${exerciseId}`; 
-    // fetchWithAuth を使用 (apikeyヘッダーが必要なため)
+  // エクササイズ詳細取得
+  getExerciseDetails: async (exerciseId: string): Promise<Exercise> => {
+    const endpoint = `/exercises/${exerciseId}`;
     return fetchWithAuth(endpoint);
   },
 

@@ -5,24 +5,19 @@ import { Card } from "../components/ui/card"
 import ExerciseVideoModal from "../components/exercise-video-modal"
 import { ChevronLeft, Search, Filter, ChevronRight, Dumbbell, Heart, Zap } from "lucide-react-native"
 import { workoutApi } from "../services/api"
-
-// モバイルアプリ側で表示するエクササイズの型定義 (APIレスポンスに合わせる)
-// バックエンドのフォーマット済みデータに対応
-type Exercise = {
-  id: string; // UUID は string
-  name: string;
-  category: string; // 'chest', 'back', etc.
-  difficulty: string; // '初級', '中級', '上級' (現状ダミー)
-  description: string;
-  tips: string[]; // (現状ダミー)
-};
+import { Exercise } from "../types/exercise"
 
 export default function ExerciseLibraryScreen({ navigation }) {
   const { colors } = useTheme()
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [modalVisible, setModalVisible] = useState(false)
-  const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null)
+  const [selectedExercise, setSelectedExercise] = useState<{
+    name: string;
+    description: string;
+    videoUrl?: string;
+    tips: string[];
+  } | null>(null)
 
   // --- State の追加 ---
   const [exercises, setExercises] = useState<Exercise[]>([]) // APIから取得したデータ用
@@ -32,12 +27,11 @@ export default function ExerciseLibraryScreen({ navigation }) {
   // トレーニング部位。部位は今後増えることも無いため、ハードコーディングでも現状問題ない
   const categories = [
     { id: "all", name: "すべて" },
-    { id: "chest", name: "胸" },
-    { id: "back", name: "背中" },
-    { id: "legs", name: "脚" },
-    { id: "shoulders", name: "肩" },
-    { id: "arms", name: "腕" },
-    { id: "abs", name: "腹筋" },
+    { id: "barbell", name: "バーベル" },
+    { id: "dumbbell", name: "ダンベル" },
+    { id: "band", name: "バンド" },
+    { id: "machine", name: "マシン" },
+    { id: "other", name: "その他" },
   ]
 
   // --- useEffect でデータを取得 ---
@@ -46,10 +40,17 @@ export default function ExerciseLibraryScreen({ navigation }) {
       setLoading(true)
       setError(null)
       try {
-        // API を呼び出し (カテゴリや検索クエリも渡せるようにする - 後述)
-        // 現状はフィルタリングをフロントで行うため、まず全件取得
+        // API を呼び出し
         const data = await workoutApi.getExerciseLibrary()
-        setExercises(data) // 取得したデータを state にセット
+        console.log("Fetched exercise data:", data)
+        
+        // ExerciseLibraryResponseの構造に対応
+        if (data && data.exercises && Array.isArray(data.exercises)) {
+          setExercises(data.exercises)
+        } else {
+          console.warn("Unexpected data structure:", data)
+          setExercises([])
+        }
       } catch (err: any) {
         console.error("Failed to fetch exercises:", err)
         setError(err.message || "エクササイズの取得に失敗しました")
@@ -64,44 +65,62 @@ export default function ExerciseLibraryScreen({ navigation }) {
 
   // --- フィルタリングロジックで使用する state を `exercises` に変更 ---
   const filteredExercises = exercises.filter((exercise) => {
-    // カテゴリのマッチング (バックエンドから返される category ID を使用)
-    const matchesCategory = selectedCategory === "all" || exercise.category === selectedCategory
+    // カテゴリのマッチング (type フィールドを使用)
+    const matchesCategory = selectedCategory === "all" || exercise.type === selectedCategory
     const matchesSearch = exercise.name.toLowerCase().includes(searchQuery.toLowerCase())
     return matchesCategory && matchesSearch
   })
 
   const handleExercisePress = (exercise: Exercise) => {
-    setSelectedExercise(exercise)
-    setModalVisible(true)
-  }
+    // ExerciseVideoModalが期待する形式に変換
+    const modalExercise = {
+      name: exercise.name,
+      description: exercise.description,
+      videoUrl: exercise.imageUrl, // imageUrlをvideoUrlとして使用（仮）
+      tips: exercise.targetMuscles.map(muscle => `対象筋肉: ${muscle}`) // targetMusclesからtipsを生成
+    };
+    setSelectedExercise(modalExercise as any);
+    setModalVisible(true);
+  };
 
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {
-      case "初級":
+      case "beginner":
         return "#10b981" // green
-      case "中級":
+      case "intermediate":
         return "#f59e0b" // amber
-      case "上級":
+      case "advanced":
         return "#ef4444" // red
       default:
         return colors.text
     }
   }
 
-  const getCategoryIcon = (category: string) => {
-    switch (category) {
-      case "chest":
+  const getDifficultyText = (difficulty: string) => {
+    switch (difficulty) {
+      case "beginner":
+        return "初級"
+      case "intermediate":
+        return "中級"
+      case "advanced":
+        return "上級"
+      default:
+        return difficulty
+    }
+  }
+
+  const getCategoryIcon = (type: string) => {
+    switch (type) {
+      case "barbell":
         return <Dumbbell size={16} color={colors.primary} />
-      case "back":
+      case "dumbbell":
+        return <Dumbbell size={16} color={colors.primary} />
+      case "band":
         return <Zap size={16} color={colors.primary} />
-      case "legs":
-        return <Zap size={16} color={colors.primary} />
-      case "shoulders":
-        return <Dumbbell size={16} color={colors.primary} />
-      case "arms":
-        return <Dumbbell size={16} color={colors.primary} />
-      case "abs":
+      case "machine":
         return <Heart size={16} color={colors.primary} />
+      case "other":
+        return <Dumbbell size={16} color={colors.primary} />
       default:
         return <Dumbbell size={16} color={colors.primary} />
     }
@@ -183,7 +202,7 @@ export default function ExerciseLibraryScreen({ navigation }) {
                 <Card style={[styles.exerciseCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                   <View style={styles.exerciseHeader}>
                     <View style={styles.exerciseInfo}>
-                      {getCategoryIcon(exercise.category)}
+                      {getCategoryIcon(exercise.type)}
                       <Text style={[styles.exerciseName, { color: colors.text }]}>{exercise.name}</Text>
                     </View>
                     <View
@@ -193,7 +212,7 @@ export default function ExerciseLibraryScreen({ navigation }) {
                       ]}
                     >
                       <Text style={[styles.difficultyText, { color: getDifficultyColor(exercise.difficulty) }]}>
-                        {exercise.difficulty}
+                        {getDifficultyText(exercise.difficulty)}
                       </Text>
                     </View>
                   </View>
