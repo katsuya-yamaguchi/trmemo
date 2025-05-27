@@ -43,11 +43,43 @@ interface DayWorkoutResponse extends TrainingDay { // TrainingDayを拡張
 
 serve(async (req) => {
   // CORSヘッダーの処理
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  };
+
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
   }
 
   try {
+    const url = new URL(req.url);
+    const pathSegments = url.pathname.split('/').filter(Boolean);
+    
+    console.log("URL pathname:", url.pathname);
+    console.log("Path segments:", pathSegments);
+
+    // パス解析の改善
+    let command = null;
+    let planId = null;
+    let dayId = null;
+
+    if (pathSegments.length >= 2 && pathSegments[0] === 'training-plan') {
+      if (pathSegments[1] === 'create') {
+        command = 'create';
+      } else if (pathSegments[1] === 'day' && pathSegments.length >= 3) {
+        // /training-plan/day/{dayId} のパターン
+        dayId = pathSegments[2];
+        command = 'day';
+      } else if (pathSegments[1].match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+        // UUID形式の場合はplanId
+        planId = pathSegments[1];
+      }
+    }
+    
+    console.log("Parsed command:", command, "planId:", planId, "dayId:", dayId);
+
     // Supabaseクライアントの作成
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
@@ -58,45 +90,6 @@ serve(async (req) => {
         },
       }
     );
-
-    // URLとメソッドの解析
-    const url = new URL(req.url);
-    const pathSegments = url.pathname.split("/").filter(Boolean);
-    console.log("Full URL:", req.url);
-    console.log("Pathname:", url.pathname);
-    console.log("Path segments:", pathSegments); // デバッグ用
-    
-    // パスセグメントの構造を確認
-    // 実際のパス: /training-plan または /training-plan/create または /training-plan/:planId
-    // pathSegments = ["training-plan"] または ["training-plan", "create"] または ["training-plan", planId]
-    
-    let command = null;
-    let planId = null;
-    
-    if (pathSegments.length === 1 && pathSegments[0] === "training-plan") {
-      // /training-plan のみ（全プラン取得）
-      command = null;
-      planId = null;
-    } else if (pathSegments.length === 2 && pathSegments[0] === "training-plan") {
-      const lastSegment = pathSegments[1];
-      if (lastSegment === "create") {
-        command = "create";
-        planId = null;
-      } else {
-        // UUIDの形式をチェック
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-        if (uuidRegex.test(lastSegment)) {
-          command = null;
-          planId = lastSegment;
-        } else {
-          throw new Error(`Invalid path segment: ${lastSegment}`);
-        }
-      }
-    } else {
-      throw new Error(`Invalid path structure: ${url.pathname} (segments: ${JSON.stringify(pathSegments)})`);
-    }
-    
-    console.log("Parsed command:", command, "planId:", planId); // デバッグ用
 
     // プラン作成
     if (req.method === "POST" && command === "create") {
@@ -276,6 +269,111 @@ serve(async (req) => {
           .not("day_number", "in", `(${dayNumbersToKeep.join(",")})`);
   
         if (deleteDaysError) throw deleteDaysError;
+      }
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+
+    // 特定の日のトレーニング内容を更新
+    else if (req.method === "PUT" && command === "day" && dayId) {
+      const { title, estimated_duration, exercises } = await req.json();
+
+      // 認証ユーザー取得
+      const { data: { user } } = await supabaseClient.auth.getUser();
+      if (!user) throw new Error("認証が必要です");
+
+      // 日の基本情報を更新
+      const { error: dayError } = await supabaseClient
+        .from("user_training_days")
+        .update({
+          title: title,
+          estimated_duration: estimated_duration,
+        })
+        .eq("id", dayId);
+
+      if (dayError) throw dayError;
+
+      // 既存の種目を削除
+      const { error: deleteExercisesError } = await supabaseClient
+        .from("user_day_exercises")
+        .delete()
+        .eq("user_training_day_id", dayId);
+
+      if (deleteExercisesError) throw deleteExercisesError;
+
+      // 新しい種目を作成
+      for (const exercise of exercises) {
+        let exerciseId = exercise.id;
+        
+        // 種目IDが一時的なIDまたは存在しない場合、種目名で検索
+        if (!exerciseId || exerciseId.startsWith('temp-')) {
+          const { data: existingExercise, error: searchError } = await supabaseClient
+            .from("exercises")
+            .select("id")
+            .eq("name", exercise.name)
+            .limit(1)
+            .maybeSingle();
+
+          if (searchError) {
+            console.error('種目検索エラー:', searchError);
+          }
+
+          if (existingExercise) {
+            exerciseId = existingExercise.id;
+          } else {
+            // 新しい種目を作成
+            const { data: newExercise, error: createError } = await supabaseClient
+              .from("exercises")
+              .insert({
+                id: crypto.randomUUID(),
+                name: exercise.name,
+                type: 'other', // デフォルトタイプ
+                description: `ユーザーが追加した種目: ${exercise.name}`,
+                target_muscles: ['その他'],
+                difficulty: 'beginner',
+                equipment: 'other'
+              })
+              .select("id")
+              .single();
+
+            if (createError) {
+              console.error('種目作成エラー:', createError);
+              throw createError;
+            }
+
+            exerciseId = newExercise.id;
+          }
+        }
+
+        // repsの解析を改善
+        let rep_min, rep_max;
+        if (typeof exercise.reps === 'string' && exercise.reps.includes('-')) {
+          // 範囲形式（例：8-12）
+          const repsParts = exercise.reps.split('-');
+          rep_min = parseInt(repsParts[0]) || 1;
+          rep_max = parseInt(repsParts[1]) || rep_min;
+        } else {
+          // 数値のみの場合
+          const repsValue = parseInt(exercise.reps) || 8;
+          rep_min = repsValue;
+          rep_max = repsValue;
+        }
+
+        const { error: exerciseError } = await supabaseClient
+          .from("user_day_exercises")
+          .insert({
+            id: crypto.randomUUID(),
+            user_training_day_id: dayId,
+            exercise_id: exerciseId,
+            set_count: exercise.sets,
+            rep_min: rep_min,
+            rep_max: rep_max,
+          });
+
+        if (exerciseError) throw exerciseError;
       }
 
       return new Response(JSON.stringify({ success: true }), {

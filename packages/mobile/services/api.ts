@@ -158,6 +158,14 @@ export const workoutApi = {
     return fetchWithAuth(`/training-plan/day/${dayId}`);
   },
 
+  // 特定の日のトレーニング内容を更新
+  updateDayWorkout: async (dayId: string, dayData: { title: string; estimated_duration: number; exercises: any[] }) => {
+    return fetchWithAuth(`/training-plan/day/${dayId}`, {
+      method: 'PUT',
+      body: JSON.stringify(dayData)
+    });
+  },
+
   // トレーニングセッション開始
   startTrainingSession: async (dayId: string) => {
     // TODO: このエンドポイントもEdge Functionに移行する必要あり
