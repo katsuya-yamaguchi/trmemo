@@ -6,7 +6,7 @@ import { useAuth } from '../context/auth-context';
 import { workoutApi } from '../services/api';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { Calendar, ChevronRight, Dumbbell, Edit2, Trash2, MoreVertical } from 'lucide-react-native';
+import { Calendar, ChevronRight, Dumbbell, Edit2 } from 'lucide-react-native';
 
 // --- 型定義 (バックエンドのレスポンスに合わせる) ---
 type ExerciseDetail = {
@@ -104,63 +104,10 @@ export default function TrainingScreen() {
      navigation.navigate("TrainingDetail", { workout: workoutDataForDetail });
   };
 
-  // プラン削除
-  const handleDeletePlan = () => {
-    if (!trainingPlan) return;
-
-    Alert.alert(
-      "プランの削除",
-      "このトレーニングプランを削除してもよろしいですか？",
-      [
-        {
-          text: "キャンセル",
-          style: "cancel"
-        },
-        {
-          text: "削除",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await workoutApi.deleteTrainingPlan(trainingPlan.id);
-              setTrainingPlan(null);
-              Alert.alert("完了", "トレーニングプランを削除しました");
-            } catch (error) {
-              console.error("プラン削除エラー:", error);
-              Alert.alert("エラー", "トレーニングプランの削除に失敗しました");
-            }
-          }
-        }
-      ]
-    );
-  };
-
   // プラン編集
   const handleEditPlan = () => {
     if (!trainingPlan) return;
     navigation.navigate("CreateTrainingPlan", { plan: trainingPlan });
-  };
-
-  // メニューを表示
-  const showMenu = () => {
-    Alert.alert(
-      "プランの管理",
-      "実行したい操作を選択してください",
-      [
-        {
-          text: "編集",
-          onPress: handleEditPlan
-        },
-        {
-          text: "削除",
-          style: "destructive",
-          onPress: handleDeletePlan
-        },
-        {
-          text: "キャンセル",
-          style: "cancel"
-        }
-      ]
-    );
   };
 
   // --- ローディングとエラー表示 ---
@@ -209,8 +156,9 @@ export default function TrainingScreen() {
           <Text style={[styles.title, { color: colors.text }]}>トレーニングプラン</Text>
           <View style={styles.programInfo}>
             <Text style={[styles.programTitle, { color: colors.text }]}>{trainingPlan.name}</Text>
-            <TouchableOpacity onPress={showMenu} style={styles.menuButton}>
-              <MoreVertical size={20} color={colors.text} />
+            <TouchableOpacity onPress={handleEditPlan} style={[styles.editButton, { backgroundColor: colors.primary }]}>
+              <Edit2 size={16} color="#fff" />
+              <Text style={styles.editButtonText}>編集</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -342,10 +290,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    marginTop: 4,
   },
   programTitle: {
     fontSize: 16,
     fontWeight: "500",
+    flex: 1,
+    marginRight: 12,
   },
   tabsContainer: {
     marginBottom: 20,
@@ -495,8 +446,18 @@ const styles = StyleSheet.create({
       fontSize: 16,
       textAlign: 'center',
   },
-  menuButton: {
-    padding: 8,
+  editButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 8,
+  },
+  editButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+    marginLeft: 4,
   },
 })
 
