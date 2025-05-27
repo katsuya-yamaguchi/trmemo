@@ -363,25 +363,311 @@ async function getProgressData(req: Request) {
   }
 }
 
+// 種目別履歴データを取得する関数
+async function getExerciseHistory(req: Request) {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
+  try {
+    const supabaseClient = supabaseAdmin;
+
+    // ユーザー認証
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Authorization header is missing' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 401,
+      });
+    }
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
+
+    if (userError || !user) {
+      console.error('User authentication error:', userError?.message);
+      return new Response(JSON.stringify({ error: 'Invalid token or user not found' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 401,
+      });
+    }
+    const userId = user.id;
+
+    // URLからクエリパラメータを取得
+    const url = new URL(req.url);
+    const exerciseId = url.searchParams.get('exerciseId');
+    const period = url.searchParams.get('period') || 'month';
+    const year = parseInt(url.searchParams.get('year') || new Date().getFullYear().toString());
+    const month = parseInt(url.searchParams.get('month') || (new Date().getMonth() + 1).toString());
+
+    if (!exerciseId) {
+      return new Response(JSON.stringify({ error: 'exerciseId is required' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      });
+    }
+
+    console.log(`[exercise-history] User: ${userId}, Exercise: ${exerciseId}, Period: ${period}, Year: ${year}, Month: ${month}`);
+
+    // 期間の計算
+    let startDate: Date, endDate: Date;
+    if (period === 'year') {
+      startDate = new Date(year, 0, 1); // 1月1日
+      endDate = new Date(year, 11, 31, 23, 59, 59); // 12月31日
+    } else {
+      startDate = new Date(year, month - 1, 1); // 指定月の1日
+      endDate = new Date(year, month, 0, 23, 59, 59); // 指定月の最終日
+    }
+
+    // 種目の履歴データを取得
+    const { data: exerciseSets, error: setsError } = await supabaseClient
+      .from('user_exercise_sets')
+      .select(`
+        weight,
+        reps,
+        completed_at,
+        session:sessions!inner(start_time)
+      `)
+      .eq('user_id', userId)
+      .eq('exercise_id', exerciseId)
+      .gte('completed_at', startDate.toISOString())
+      .lte('completed_at', endDate.toISOString())
+      .order('completed_at', { ascending: true });
+
+    if (setsError) {
+      console.error('Error fetching exercise sets:', setsError);
+      throw new Error(`種目履歴データの取得エラー: ${setsError.message}`);
+    }
+
+    // 統計データの計算
+    const sets = exerciseSets || [];
+    const maxWeight = sets.length > 0 ? Math.max(...sets.map(s => s.weight || 0)) : 0;
+    const totalReps = sets.reduce((sum, s) => sum + (s.reps || 0), 0);
+    
+    // 推定1RM計算（Brzycki式: 1RM = weight / (1.0278 - 0.0278 * reps)）
+    const estimatedOneRM = sets.length > 0 ? Math.max(...sets.map(s => {
+      if (!s.weight || !s.reps || s.reps === 0) return 0;
+      return Math.round(s.weight / (1.0278 - 0.0278 * s.reps));
+    })) : 0;
+
+    const lastWorkoutDate = sets.length > 0 ? sets[sets.length - 1].completed_at : null;
+
+    // 詳細履歴データの生成（日付別にグループ化）
+    const detailsMap = new Map<string, any[]>();
+    sets.forEach(set => {
+      const dateKey = format(new Date(set.completed_at), 'yyyy-MM-dd');
+      if (!detailsMap.has(dateKey)) {
+        detailsMap.set(dateKey, []);
+      }
+      detailsMap.get(dateKey)!.push({
+        weight: set.weight || 0,
+        reps: set.reps || 0,
+        volume: (set.weight || 0) * (set.reps || 0)
+      });
+    });
+
+    const details = Array.from(detailsMap.entries()).map(([date, sets]) => ({
+      date: format(new Date(date), 'M/d'),
+      sets,
+      totalVolume: sets.reduce((sum, set) => sum + set.volume, 0),
+      maxWeight: Math.max(...sets.map(set => set.weight))
+    })).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()); // 新しい順
+
+    // グラフデータの生成
+    const { labels, intervalFormat } = generateChartLabels(startDate, endDate, period);
+    
+    // 日別の最大重量を計算
+    const chartData = formatChartData(
+      sets,
+      labels,
+      'completed_at',
+      'weight',
+      true // 最大重量を使用
+    );
+
+    const stats = {
+      maxWeight,
+      totalReps,
+      estimatedOneRM,
+      lastWorkoutDate: lastWorkoutDate ? format(new Date(lastWorkoutDate), 'yyyy-MM-dd') : null
+    };
+
+    // 前期間との比較データを取得
+    let comparison = null;
+    try {
+      let prevStartDate: Date, prevEndDate: Date;
+      if (period === 'year') {
+        prevStartDate = new Date(year - 1, 0, 1);
+        prevEndDate = new Date(year - 1, 11, 31, 23, 59, 59);
+      } else {
+        prevStartDate = new Date(year, month - 2, 1);
+        prevEndDate = new Date(year, month - 1, 0, 23, 59, 59);
+      }
+
+      const { data: prevExerciseSets } = await supabaseClient
+        .from('user_exercise_sets')
+        .select('weight, reps, completed_at')
+        .eq('user_id', userId)
+        .eq('exercise_id', exerciseId)
+        .gte('completed_at', prevStartDate.toISOString())
+        .lte('completed_at', prevEndDate.toISOString());
+
+      if (prevExerciseSets && prevExerciseSets.length > 0) {
+        const prevMaxWeight = Math.max(...prevExerciseSets.map(s => s.weight || 0));
+        const prevTotalReps = prevExerciseSets.reduce((sum, s) => sum + (s.reps || 0), 0);
+        const prevEstimatedOneRM = Math.max(...prevExerciseSets.map(s => {
+          if (!s.weight || !s.reps || s.reps === 0) return 0;
+          return Math.round(s.weight / (1.0278 - 0.0278 * s.reps));
+        }));
+
+        comparison = {
+          maxWeightChange: maxWeight - prevMaxWeight,
+          totalRepsChange: totalReps - prevTotalReps,
+          oneRMChange: estimatedOneRM - prevEstimatedOneRM
+        };
+      }
+    } catch (error) {
+      console.warn('Could not fetch comparison data:', error);
+    }
+
+    return new Response(JSON.stringify({ 
+      chartData, 
+      stats: { ...stats, comparison }, 
+      details 
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200,
+    });
+
+  } catch (error) {
+    console.error('Critical error in getExerciseHistory:', error);
+    const errorMessage = error instanceof Error ? error.message : 'サーバーエラーが発生しました';
+    return new Response(JSON.stringify({ error: errorMessage }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500,
+    });
+  }
+}
+
+// ユーザーが実行した種目一覧を取得する関数
+async function getUserExercises(req: Request) {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
+  try {
+    const supabaseClient = supabaseAdmin;
+
+    // ユーザー認証
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Authorization header is missing' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 401,
+      });
+    }
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
+
+    if (userError || !user) {
+      console.error('User authentication error:', userError?.message);
+      return new Response(JSON.stringify({ error: 'Invalid token or user not found' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 401,
+      });
+    }
+    const userId = user.id;
+
+    // ユーザーが実行した種目一覧を取得（重複除去）
+    const { data: userExercises, error: exercisesError } = await supabaseClient
+      .from('user_exercise_sets')
+      .select(`
+        exercise_id,
+        exercise:exercises!inner(name)
+      `)
+      .eq('user_id', userId)
+      .not('exercise_id', 'is', null)
+      .order('exercise_id');
+
+    if (exercisesError) {
+      console.error('Error fetching user exercises:', exercisesError);
+      throw new Error(`ユーザー種目一覧の取得エラー: ${exercisesError.message}`);
+    }
+
+    // 重複を除去して種目一覧を作成
+    const uniqueExercises = Array.from(
+      new Map(
+        (userExercises || []).map(item => [
+          item.exercise_id,
+          { id: item.exercise_id, name: item.exercise.name }
+        ])
+      ).values()
+    );
+
+    return new Response(JSON.stringify(uniqueExercises), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200,
+    });
+
+  } catch (error) {
+    console.error('Critical error in getUserExercises:', error);
+    const errorMessage = error instanceof Error ? error.message : 'サーバーエラーが発生しました';
+    return new Response(JSON.stringify({ error: errorMessage }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500,
+    });
+  }
+}
 
 serve(async (req) => {
-  // リクエストパスに基づいて処理を振り分け (今回は /progress のみ)
-  // Edge Functionsでは、通常、Function名がパスの一部になるため、
-  // Function内のルーティングは、より詳細なパスやメソッドで行うことが多い。
-  // 今回は /progress-data/ という Function が呼ばれた時点でこのコードが実行される想定。
-  // クエリパラメータで dataType を受け取るので、パスによる分岐は不要。
-
-  // 実際には、Functionが呼び出されるURLは /functions/v1/progress-data になる。
-  // req.url をパースして、そこから必要な情報を取得する。
-
-  // TODO: 以前のFunctionのように、パスのセグメントを解析して / 以外のパスに対応する場合は、
-  //       そのロジックを追加する。今回は /progress-data (ルート) のみ処理すると仮定。
-  // const url = new URL(req.url);
-  // const pathSegments = url.pathname.split('/').filter(Boolean);
-  // console.log('[progress-data] Request path segments:', pathSegments);
-
-  // 現状、このFunctionは /progress-data という単一のエンドポイントのみを持つ想定
-  return getProgressData(req);
+  const url = new URL(req.url);
+  const fullPath = url.pathname;
+  
+  console.log(`[progress-data] Request URL: ${req.url}`);
+  console.log(`[progress-data] Full path: ${fullPath}`);
+  
+  // 複数のパターンに対応
+  let pathSegments: string[] = [];
+  
+  // パターン1: /functions/v1/progress-data/...
+  if (fullPath.includes('/functions/v1/progress-data')) {
+    const afterProgressData = fullPath.split('/functions/v1/progress-data')[1] || '';
+    pathSegments = afterProgressData.split('/').filter(Boolean);
+    console.log(`[progress-data] Pattern 1 - After progress-data: ${afterProgressData}`);
+  }
+  // パターン2: /progress-data/...
+  else if (fullPath.includes('/progress-data')) {
+    const afterProgressData = fullPath.split('/progress-data')[1] || '';
+    pathSegments = afterProgressData.split('/').filter(Boolean);
+    console.log(`[progress-data] Pattern 2 - After progress-data: ${afterProgressData}`);
+  }
+  // パターン3: 直接パス
+  else {
+    pathSegments = fullPath.split('/').filter(Boolean);
+    console.log(`[progress-data] Pattern 3 - Direct path segments`);
+  }
+  
+  console.log(`[progress-data] Final path segments: ${JSON.stringify(pathSegments)}`);
+  
+  // パスに基づいてルーティング
+  if (pathSegments.length === 0) {
+    // /progress-data (ルート) - 既存の進捗データ
+    console.log('[progress-data] Routing to getProgressData');
+    return getProgressData(req);
+  } else if (pathSegments[0] === 'exercise-history') {
+    // /progress-data/exercise-history - 種目別履歴
+    console.log('[progress-data] Routing to getExerciseHistory');
+    return getExerciseHistory(req);
+  } else if (pathSegments[0] === 'user-exercises') {
+    // /progress-data/user-exercises - ユーザー種目一覧
+    console.log('[progress-data] Routing to getUserExercises');
+    return getUserExercises(req);
+  } else {
+    console.log(`[progress-data] Unknown path: ${pathSegments[0]} (full segments: ${JSON.stringify(pathSegments)})`);
+    return new Response(JSON.stringify({ error: 'Not found' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 404,
+    });
+  }
 });
 
 /*

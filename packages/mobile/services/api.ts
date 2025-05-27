@@ -231,6 +231,24 @@ export const workoutApi = {
     return fetchWithAuth(endpoint);
   },
 
+  // ユーザーが実行した種目一覧取得
+  getUserExercises: async () => {
+    const endpoint = `/progress-data/user-exercises`;
+    return fetchWithAuth(endpoint);
+  },
+
+  // 種目別履歴データ取得
+  getExerciseHistory: async (exerciseId: string, period: string = 'month', year?: number, month?: number) => {
+    const params = new URLSearchParams();
+    params.append('exerciseId', exerciseId);
+    params.append('period', period);
+    if (year) params.append('year', year.toString());
+    if (month) params.append('month', month.toString());
+    
+    const endpoint = `/progress-data/exercise-history?${params.toString()}`;
+    return fetchWithAuth(endpoint);
+  },
+
   // legal関連も修正が必要そうだが、今回はworkoutApiに集中
   getTermsOfService: async () => {
     // 認証不要なため、直接fetchを使用し、apikeyをヘッダーに付与
