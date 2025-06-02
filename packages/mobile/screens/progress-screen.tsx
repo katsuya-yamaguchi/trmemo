@@ -24,16 +24,12 @@ interface WeightStats {
   change: number;
 }
 
-interface StrengthStats {
-  maxWeights: { name: string; weight: number }[];
-}
-
 interface WorkoutCountStats {
   total: number;
   target: number;
 }
 
-type ProgressStats = WeightStats | StrengthStats | WorkoutCountStats | null;
+type ProgressStats = WeightStats | WorkoutCountStats | null;
 
 interface WorkoutHistoryItem {
   id?: string; // Assuming id might exist for key or navigation
@@ -90,6 +86,7 @@ export default function ProgressScreen() {
   const [exerciseHistoryDetails, setExerciseHistoryDetails] = useState<ExerciseHistoryDetail[]>([])
   const [showDetailsList, setShowDetailsList] = useState(false)
   const [exerciseSearchQuery, setExerciseSearchQuery] = useState("")
+  const [showPeriodDropdown, setShowPeriodDropdown] = useState(false)
 
   const screenWidth = Dimensions.get("window").width - 40
 
@@ -214,42 +211,181 @@ export default function ProgressScreen() {
       return <Text style={[styles.noDataText, { color: colors.text }]}>データがありません</Text>
     }
 
+    // データポイント数に基づいて幅を計算（最小幅を保証）
+    const minWidth = screenWidth - 50 // Y軸ラベル分の幅を除く
+    const dataPointWidth = 40 // 各データポイントの幅を少し狭く
+    const paddingWidth = 80 // 左右のパディング
+    const calculatedWidth = Math.max(minWidth, chartData.labels.length * dataPointWidth + paddingWidth)
+
+    // Y軸の値の範囲を計算
+    const allValues: number[] = []
+    chartData.datasets.forEach(dataset => {
+      if (dataset.data && Array.isArray(dataset.data)) {
+        allValues.push(...dataset.data)
+      }
+    })
+    
+    if (allValues.length === 0) {
+      return <Text style={[styles.noDataText, { color: colors.text }]}>データがありません</Text>
+    }
+    
+    const maxValue = Math.max(...allValues)
+    const minValue = Math.min(...allValues)
+    const range = maxValue - minValue
+    const padding = range * 0.1 // 10%のパディング
+    const yAxisMax = maxValue + padding
+    const yAxisMin = Math.max(0, minValue - padding)
+
+    // Y軸ラベルを生成（5段階）
+    const yAxisLabels: number[] = []
+    for (let i = 0; i <= 4; i++) {
+      const value = yAxisMin + (yAxisMax - yAxisMin) * (4 - i) / 4
+      yAxisLabels.push(Math.round(value))
+    }
+
+    const renderScrollableChart = () => {
+      // Y軸ラベルを非表示にしたチャート設定
+      const chartConfigNoYAxis = {
+        ...chartConfig,
+        propsForLabels: {
+          fontSize: 0, // Y軸ラベルのフォントサイズを0に
+        },
+        labelColor: () => 'transparent', // ラベルを透明に
+      }
+
+      switch (activeTab) {
+        case "weight":
+          return (
+            <LineChart
+              data={chartData}
+              width={calculatedWidth}
+              height={220}
+              chartConfig={chartConfigNoYAxis}
+              bezier
+              style={styles.chart}
+              yAxisSuffix=""
+              withVerticalLabels={false}
+              withHorizontalLabels={true}
+            />
+          )
+        case "workouts":
+          return (
+            <BarChart
+              data={chartData}
+              width={calculatedWidth}
+              height={220}
+              chartConfig={chartConfigNoYAxis}
+              style={styles.chart}
+              yAxisSuffix=""
+              yAxisLabel=""
+              withVerticalLabels={false}
+              withHorizontalLabels={true}
+            />
+          )
+        default:
+          return null
+      }
+    }
+
+    // データが多い場合は横スクロール可能にする
+    if (calculatedWidth > minWidth) {
+      return (
+        <View style={styles.chartWithYAxisContainer}>
+          {/* 固定Y軸ラベル */}
+          <View style={styles.yAxisContainer}>
+            {yAxisLabels.map((label, index) => (
+              <View key={index} style={styles.yAxisLabelContainer}>
+                <Text style={[styles.yAxisLabel, { color: colors.text }]}>
+                  {label}{activeTab === "workouts" ? "回" : "kg"}
+                </Text>
+              </View>
+            ))}
+          </View>
+          
+          {/* スクロール可能なグラフ */}
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={true}
+            style={styles.chartScrollContainer}
+            contentContainerStyle={[styles.chartScrollContent, { marginLeft: -20 }]}
+          >
+            {renderScrollableChart()}
+          </ScrollView>
+        </View>
+      )
+    }
+
+    // データが少ない場合は通常表示
     switch (activeTab) {
       case "weight":
         return (
-          <LineChart
-            data={chartData}
-            width={screenWidth}
-            height={220}
-            chartConfig={chartConfig}
-            bezier
-            style={styles.chart}
-            yAxisSuffix="kg"
-          />
-        )
-      case "strength":
-        return (
-          <BarChart
-            data={chartData}
-            width={screenWidth}
-            height={220}
-            chartConfig={chartConfig}
-            style={styles.chart}
-            yAxisSuffix="kg"
-            yAxisLabel=""
-          />
+          <View style={styles.chartWithYAxisContainer}>
+            {/* 固定Y軸ラベル */}
+            <View style={styles.yAxisContainer}>
+              {yAxisLabels.map((label, index) => (
+                <View key={index} style={styles.yAxisLabelContainer}>
+                  <Text style={[styles.yAxisLabel, { color: colors.text }]}>
+                    {label}kg
+                  </Text>
+                </View>
+              ))}
+            </View>
+            
+            <View style={{ marginLeft: -20 }}>
+              <LineChart
+                data={chartData}
+                width={screenWidth - 50} // Y軸ラベル分の幅を除く
+                height={220}
+                chartConfig={{
+                  ...chartConfig,
+                  propsForLabels: {
+                    fontSize: 0,
+                  },
+                  labelColor: () => 'transparent',
+                }}
+                bezier
+                style={styles.chart}
+                yAxisSuffix=""
+                withVerticalLabels={false}
+                withHorizontalLabels={true}
+              />
+            </View>
+          </View>
         )
       case "workouts":
         return (
-          <BarChart
-            data={chartData}
-            width={screenWidth}
-            height={220}
-            chartConfig={chartConfig}
-            style={styles.chart}
-            yAxisSuffix="回"
-            yAxisLabel=""
-          />
+          <View style={styles.chartWithYAxisContainer}>
+            {/* 固定Y軸ラベル */}
+            <View style={styles.yAxisContainer}>
+              {yAxisLabels.map((label, index) => (
+                <View key={index} style={styles.yAxisLabelContainer}>
+                  <Text style={[styles.yAxisLabel, { color: colors.text }]}>
+                    {label}回
+                  </Text>
+                </View>
+              ))}
+            </View>
+            
+            <View style={{ marginLeft: -20 }}>
+              <BarChart
+                data={chartData}
+                width={screenWidth - 50} // Y軸ラベル分の幅を除く
+                height={220}
+                chartConfig={{
+                  ...chartConfig,
+                  propsForLabels: {
+                    fontSize: 0,
+                  },
+                  labelColor: () => 'transparent',
+                }}
+                style={styles.chart}
+                yAxisSuffix=""
+                yAxisLabel=""
+                withVerticalLabels={false}
+                withHorizontalLabels={true}
+              />
+            </View>
+          </View>
         )
       default:
         return null
@@ -257,17 +393,8 @@ export default function ProgressScreen() {
   }
 
   const handleTimeRangeChange = () => {
-    // モーダルや選択UIを表示して期間を選択
-    Alert.alert(
-      "期間選択",
-      "表示する期間を選択してください",
-      [
-        { text: "1週間", onPress: () => setTimeRange("week") },
-        { text: "1ヶ月", onPress: () => setTimeRange("month") },
-        { text: "1年", onPress: () => setTimeRange("year") },
-        { text: "キャンセル", style: "cancel" }
-      ]
-    )
+    // 期間選択プルダウンの表示/非表示を切り替え
+    setShowPeriodDropdown(!showPeriodDropdown)
   }
 
   const handleShare = () => {
@@ -319,14 +446,24 @@ export default function ProgressScreen() {
               <ChevronLeft size={20} color={colors.primary} />
             </TouchableOpacity>
             
-            <TouchableOpacity onPress={handleTimeRangeChangeForExercise}>
+            <View style={styles.periodCenterContainer}>
+              <TouchableOpacity 
+                style={styles.periodSelectButton}
+                onPress={() => setShowPeriodDropdown(!showPeriodDropdown)}
+              >
+                <Text style={[styles.periodSelectText, { color: colors.text }]}>
+                  {timeRange === "month" ? "月別" : "年別"}
+                </Text>
+                <ChevronDown size={16} color={colors.text} />
+              </TouchableOpacity>
+              
               <Text style={[styles.periodText, { color: colors.text }]}>
                 {timeRange === "month" 
                   ? `${currentPeriod.getFullYear()}年${currentPeriod.getMonth() + 1}月`
                   : `${currentPeriod.getFullYear()}年`
                 }
               </Text>
-            </TouchableOpacity>
+            </View>
             
             <TouchableOpacity 
               style={styles.periodNavButton}
@@ -352,6 +489,37 @@ export default function ProgressScreen() {
               <ChevronRight size={20} color={colors.primary} />
             </TouchableOpacity>
           </View>
+          
+          {showPeriodDropdown && (
+            <View style={[styles.dropdownContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <TouchableOpacity
+                style={[
+                  styles.dropdownOption,
+                  { borderBottomColor: colors.border },
+                  timeRange === "month" && { backgroundColor: colors.primary + "20" }
+                ]}
+                onPress={() => {
+                  setTimeRange("month")
+                  setShowPeriodDropdown(false)
+                }}
+              >
+                <Text style={[styles.dropdownOptionText, { color: colors.text }]}>月別</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[
+                  styles.dropdownOption,
+                  timeRange === "year" && { backgroundColor: colors.primary + "20" }
+                ]}
+                onPress={() => {
+                  setTimeRange("year")
+                  setShowPeriodDropdown(false)
+                }}
+              >
+                <Text style={[styles.dropdownOptionText, { color: colors.text }]}>年別</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </Card>
 
         {/* 統計サマリー */}
@@ -417,19 +585,6 @@ export default function ProgressScreen() {
 
         {renderExerciseHistoryDetails()}
       </>
-    )
-  }
-
-  // 期間選択の改善
-  const handleTimeRangeChangeForExercise = () => {
-    Alert.alert(
-      "期間選択",
-      "表示する期間を選択してください",
-      [
-        { text: "月別", onPress: () => setTimeRange("month") },
-        { text: "年別", onPress: () => setTimeRange("year") },
-        { text: "キャンセル", style: "cancel" }
-      ]
     )
   }
 
@@ -512,17 +667,50 @@ export default function ProgressScreen() {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.filterContainer}>
-          <TouchableOpacity 
-            style={[styles.filterButton, { borderColor: colors.border }]}
-            onPress={activeTab === "exercise-history" ? handleTimeRangeChangeForExercise : handleTimeRangeChange}
-          >
-            <Text style={[styles.filterText, { color: colors.text }]}>
-              期間: {timeRange === "week" ? "1週間" : timeRange === "month" ? "1ヶ月" : "1年"}
-            </Text>
-            <ChevronDown size={16} color={colors.text} />
-          </TouchableOpacity>
-        </View>
+        {activeTab !== "exercise-history" && (
+          <View style={styles.filterContainer}>
+            <TouchableOpacity 
+              style={[styles.filterButton, { borderColor: colors.border }]}
+              onPress={handleTimeRangeChange}
+            >
+              <Text style={[styles.filterText, { color: colors.text }]}>
+                期間: {timeRange === "week" ? "1週間" : timeRange === "month" ? "1ヶ月" : "1年"}
+              </Text>
+              <ChevronDown size={16} color={colors.text} />
+            </TouchableOpacity>
+            
+            {showPeriodDropdown && (
+              <View style={[styles.dropdownContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <TouchableOpacity
+                  style={[
+                    styles.dropdownOption,
+                    { borderBottomColor: colors.border },
+                    timeRange === "month" && { backgroundColor: colors.primary + "20" }
+                  ]}
+                  onPress={() => {
+                    setTimeRange("month")
+                    setShowPeriodDropdown(false)
+                  }}
+                >
+                  <Text style={[styles.dropdownOptionText, { color: colors.text }]}>月別</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[
+                    styles.dropdownOption,
+                    timeRange === "year" && { backgroundColor: colors.primary + "20" }
+                  ]}
+                  onPress={() => {
+                    setTimeRange("year")
+                    setShowPeriodDropdown(false)
+                  }}
+                >
+                  <Text style={[styles.dropdownOptionText, { color: colors.text }]}>年別</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        )}
 
         <View style={styles.tabsContainer}>
           <TouchableOpacity
@@ -530,12 +718,6 @@ export default function ProgressScreen() {
             onPress={() => setActiveTab("weight")}
           >
             <Text style={[styles.tabText, { color: activeTab === "weight" ? "#fff" : colors.text }]}>体重</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === "strength" && { backgroundColor: colors.primary }]}
-            onPress={() => setActiveTab("strength")}
-          >
-            <Text style={[styles.tabText, { color: activeTab === "strength" ? "#fff" : colors.text }]}>筋力</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tab, activeTab === "workouts" && { backgroundColor: colors.primary }]}
@@ -561,7 +743,7 @@ export default function ProgressScreen() {
           <>
             <Card style={[styles.chartCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <Text style={[styles.chartTitle, { color: colors.text }]}>
-                {activeTab === "weight" ? "体重の推移" : activeTab === "strength" ? "最大挙上重量" : "トレーニング頻度"}
+                {activeTab === "weight" ? "体重の推移" : "トレーニング頻度"}
               </Text>
               {renderChart()}
 
@@ -575,17 +757,6 @@ export default function ProgressScreen() {
                     ]}
                   >
                     {(stats as WeightStats).change > 0 ? '+' : ''}{(stats as WeightStats).change}kg
-                  </Text>
-                </View>
-              )}
-
-              {stats && activeTab === "strength" && (stats as StrengthStats).maxWeights && (
-                <View style={styles.highlightContainer}>
-                  <Text style={[styles.highlightLabel, { color: colors.text }]}>
-                    {(stats as StrengthStats).maxWeights[0]?.name || 'ベンチプレス'}自己ベスト:
-                  </Text>
-                  <Text style={[styles.highlightValue, { color: colors.primary }]}>
-                    {(stats as StrengthStats).maxWeights[0]?.weight || 0}kg
                   </Text>
                 </View>
               )}
@@ -739,6 +910,8 @@ const styles = StyleSheet.create({
   },
   filterContainer: {
     marginBottom: 20,
+    position: "relative",
+    zIndex: 1000,
   },
   filterButton: {
     flexDirection: "row",
@@ -893,6 +1066,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     marginBottom: 20,
+    position: "relative",
+    zIndex: 1000,
   },
   periodNavContainer: {
     flexDirection: "row",
@@ -906,6 +1081,24 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
+  },
+  periodCenterContainer: {
+    flexDirection: "column",
+    alignItems: "center",
+    flex: 1,
+  },
+  periodSelectButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginBottom: 4,
+  },
+  periodSelectText: {
+    fontSize: 14,
+    fontWeight: "500",
+    marginRight: 4,
   },
   periodText: {
     fontSize: 16,
@@ -1067,5 +1260,55 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 10,
     fontSize: 16,
+  },
+  dropdownContainer: {
+    position: "absolute",
+    top: "100%",
+    left: 0,
+    right: 0,
+    borderWidth: 1,
+    borderRadius: 8,
+    marginTop: 5,
+    zIndex: 9999,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 15,
+  },
+  dropdownOption: {
+    padding: 12,
+    borderBottomWidth: 1,
+  },
+  dropdownOptionText: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  chartScrollContainer: {
+    marginVertical: 8,
+  },
+  chartScrollContent: {
+    paddingHorizontal: 10,
+  },
+  chartWithYAxisContainer: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+  yAxisContainer: {
+    width: 35,
+    height: 220,
+    justifyContent: "space-between",
+    paddingVertical: 20,
+    paddingRight: 0, // 右側の余白を完全に削除
+  },
+  yAxisLabelContainer: {
+    alignItems: "flex-end",
+  },
+  yAxisLabel: {
+    fontSize: 11,
+    fontWeight: "500",
   },
 })
