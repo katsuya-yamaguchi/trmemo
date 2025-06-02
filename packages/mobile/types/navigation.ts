@@ -8,7 +8,6 @@ export type RootStackParamList = {
   ContactUsScreen: undefined;
   TermsOfService: undefined;
   PrivacyPolicy: undefined;
-  ExerciseLibrary: undefined;
   WorkoutDetail: { workoutId: string }; // 例: ワークアウト詳細画面
   // ... 他の全てのスクリーンと、それらが期待するパラメータ
 };
