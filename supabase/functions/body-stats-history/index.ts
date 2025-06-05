@@ -83,72 +83,69 @@ serve(async (req) => {
     }
 
     const url = new URL(req.url);
-    const period = url.searchParams.get('period') || 'month'; // 'week', 'month', 'year'
+    const period = url.searchParams.get('period') || 'month';
+    const limitParam = url.searchParams.get('limit');
+    const limit = limitParam ? parseInt(limitParam) : null;
 
-    // 期間に基づいて日付範囲を計算
-    const endDate = new Date();
-    const startDate = new Date();
-
-    if (period === 'week') {
-      startDate.setDate(endDate.getDate() - 7);
-    } else if (period === 'month') {
-      startDate.setMonth(endDate.getMonth() - 1);
-    } else if (period === 'year') {
-      startDate.setFullYear(endDate.getFullYear() - 1);
-    } else {
-        return new Response(JSON.stringify({ message: '無効な期間パラメータです。week, month, yearのいずれかを指定してください。' }), {
-            status: 400,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-    }
-
-    // 体重履歴を取得
-    const { data: historyData, error: dbError } = await supabaseAdmin
+    let query = supabaseAdmin
       .from('body_stats')
       .select('*')
       .eq('user_id', user.id)
-      .gte('recorded_at', startDate.toISOString())
-      .lte('recorded_at', endDate.toISOString())
       .order('recorded_at', { ascending: false });
+
+    // "latest"の場合は最新データを限定数で取得
+    if (period === 'latest') {
+      if (limit) {
+        query = query.limit(limit);
+      } else {
+        query = query.limit(2); // デフォルトで最新2件（現在と前回）
+      }
+    } else {
+      // 期間に基づいて日付範囲を計算
+      const endDate = new Date();
+      const startDate = new Date();
+
+      if (period === 'week') {
+        startDate.setDate(endDate.getDate() - 7);
+      } else if (period === 'month') {
+        startDate.setMonth(endDate.getMonth() - 1);
+      } else if (period === 'year') {
+        startDate.setFullYear(endDate.getFullYear() - 1);
+      } else {
+        return new Response(JSON.stringify({ error: '無効な期間パラメータです。latest, week, month, yearのいずれかを指定してください。' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      query = query
+        .gte('recorded_at', startDate.toISOString().split('T')[0]) // DATE型の比較用にYYYY-MM-DD形式
+        .lte('recorded_at', endDate.toISOString().split('T')[0]);
+
+      if (limit) {
+        query = query.limit(limit);
+      }
+    }
+
+    const { data: historyData, error: dbError } = await query;
 
     if (dbError) {
       console.error('体重履歴の取得に失敗しました:', dbError);
-      return new Response(JSON.stringify({ message: '体重履歴の取得に失敗しました', error: dbError.message }), {
+      return new Response(JSON.stringify({ error: '体重履歴の取得に失敗しました', details: dbError.message }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    let currentWeight = null;
-    let startWeight = null;
-    let weightChange = null;
-
-    if (historyData && historyData.length > 0) {
-      // recorded_at で降順ソート済みなので、最初が最新
-      currentWeight = historyData[0].weight;
-      // 期間内の最も古いデータ（配列の最後）を開始体重とする
-      startWeight = historyData[historyData.length - 1].weight;
-      weightChange = currentWeight && startWeight ? currentWeight - startWeight : null;
-    }
-
-    const chartData = formatChartData(historyData || [], period);
-
-    return new Response(JSON.stringify({
-      history: historyData,
-      stats: {
-        current: currentWeight,
-        start: startWeight,
-        change: weightChange,
-      },
-      chartData,
-    }), {
+    // フロントエンドが期待する形式で返却
+    return new Response(JSON.stringify(historyData || []), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
 
   } catch (error) {
     console.error('サーバーエラー:', error);
-    return new Response(JSON.stringify({ message: 'サーバーエラー', error: error.message }), {
+    return new Response(JSON.stringify({ error: 'サーバーエラー', details: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,
     });

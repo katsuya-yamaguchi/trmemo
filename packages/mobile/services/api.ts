@@ -3,6 +3,7 @@ import Constants from 'expo-constants';
 import { Session, AuthError } from '@supabase/supabase-js';
 import { supabase, supabaseAnonKey, supabaseUrl } from '../lib/supabase';
 import { Exercise, ExerciseLibraryResponse, TrainingPlan } from '../types/exercise';
+import { BodyStat, BodyStatInput, LatestBodyStats, BodyStatsResponse } from '../types/body-stats';
 
 // APIのベースURL
 // const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
@@ -88,16 +89,74 @@ export const userApi = {
   },
 
   // 体重・体組成記録
-  recordBodyStats: async (stats: { weight: number, bodyFat?: number, date: string }) => {
-    return fetchWithAuth(`/record-body-stats`, {
-      method: 'POST',
-      body: JSON.stringify(stats)
-    });
+  recordBodyStats: async (stats: { weight: number, bodyFat?: number, date: string }): Promise<BodyStatsResponse> => {
+    try {
+      const result = await fetchWithAuth(`/record-body-stats`, {
+        method: 'POST',
+        body: JSON.stringify({
+          weight: stats.weight,
+          body_fat: stats.bodyFat,
+          date: stats.date
+        })
+      });
+      return { success: true, data: result };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  },
+
+  // 最新の体重・体脂肪率データ取得
+  getLatestBodyStats: async (): Promise<LatestBodyStats | null> => {
+    try {
+      const data = await fetchWithAuth(`/body-stats-history?period=latest&limit=2`);
+      console.log('API から取得したraw データ:', data);
+      
+      if (!data || !Array.isArray(data) || data.length === 0) {
+        console.log('データが空またはnull');
+        return null;
+      }
+      
+      const latest = data[0];
+      const previous = data.length > 1 ? data[1] : null;
+      console.log('最新レコード:', latest);
+      console.log('前回レコード:', previous);
+      
+      const result: LatestBodyStats = {
+        weight: latest.weight,
+        bodyFat: latest.body_fat_percentage,
+        recordedDate: latest.recorded_at,
+      };
+      console.log('変換後の result:', result);
+      
+      if (previous) {
+        result.previousWeight = previous.weight;
+        result.weightChange = latest.weight - previous.weight;
+        if (previous.body_fat_percentage && latest.body_fat_percentage) {
+          result.previousBodyFat = previous.body_fat_percentage;
+          result.bodyFatChange = latest.body_fat_percentage - previous.body_fat_percentage;
+        } else if (previous.body_fat_percentage) {
+          // 前回の体脂肪率データがある場合は設定（現在が未記録でも）
+          result.previousBodyFat = previous.body_fat_percentage;
+        }
+      }
+      
+      console.log('最終的な result:', result);
+      return result;
+    } catch (error) {
+      console.error('最新体重データ取得エラー:', error);
+      return null;
+    }
   },
 
   // 体重履歴取得
-  getBodyStatsHistory: async (period: string = 'month') => {
-    return fetchWithAuth(`/body-stats-history?period=${period}`);
+  getBodyStatsHistory: async (period: string = 'month'): Promise<BodyStat[]> => {
+    try {
+      const data = await fetchWithAuth(`/body-stats-history?period=${period}`);
+      return Array.isArray(data) ? data : [];
+    } catch (error) {
+      console.error('体重履歴取得エラー:', error);
+      return [];
+    }
   },
 
   // 通知設定更新

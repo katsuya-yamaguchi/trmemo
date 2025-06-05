@@ -435,7 +435,9 @@ export default function ProgressScreen() {
               style={styles.periodNavButton}
               onPress={() => {
                 const newDate = new Date(currentPeriod)
-                if (timeRange === "month") {
+                if (timeRange === "week") {
+                  newDate.setDate(newDate.getDate() - 7)
+                } else if (timeRange === "month") {
                   newDate.setMonth(newDate.getMonth() - 1)
                 } else if (timeRange === "year") {
                   newDate.setFullYear(newDate.getFullYear() - 1)
@@ -452,15 +454,17 @@ export default function ProgressScreen() {
                 onPress={() => setShowPeriodDropdown(!showPeriodDropdown)}
               >
                 <Text style={[styles.periodSelectText, { color: colors.text }]}>
-                  {timeRange === "month" ? "月別" : "年別"}
+                  {timeRange === "week" ? "週別" : timeRange === "month" ? "月別" : "年別"}
                 </Text>
                 <ChevronDown size={16} color={colors.text} />
               </TouchableOpacity>
               
               <Text style={[styles.periodText, { color: colors.text }]}>
-                {timeRange === "month" 
-                  ? `${currentPeriod.getFullYear()}年${currentPeriod.getMonth() + 1}月`
-                  : `${currentPeriod.getFullYear()}年`
+                {timeRange === "week" 
+                  ? `${currentPeriod.getFullYear()}年${Math.ceil((currentPeriod.getDate() + currentPeriod.getDay()) / 7)}週目`
+                  : timeRange === "month" 
+                    ? `${currentPeriod.getFullYear()}年${currentPeriod.getMonth() + 1}月`
+                    : `${currentPeriod.getFullYear()}年`
                 }
               </Text>
             </View>
@@ -471,7 +475,12 @@ export default function ProgressScreen() {
                 const newDate = new Date(currentPeriod)
                 const now = new Date()
                 
-                if (timeRange === "month") {
+                if (timeRange === "week") {
+                  newDate.setDate(newDate.getDate() + 7)
+                  if (newDate <= now) {
+                    setCurrentPeriod(newDate)
+                  }
+                } else if (timeRange === "month") {
                   newDate.setMonth(newDate.getMonth() + 1)
                   // 未来の月は選択できないように制限
                   if (newDate <= now) {
@@ -492,6 +501,20 @@ export default function ProgressScreen() {
           
           {showPeriodDropdown && (
             <View style={[styles.dropdownContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <TouchableOpacity
+                style={[
+                  styles.dropdownOption,
+                  { borderBottomColor: colors.border },
+                  timeRange === "week" && { backgroundColor: colors.primary + "20" }
+                ]}
+                onPress={() => {
+                  setTimeRange("week")
+                  setShowPeriodDropdown(false)
+                }}
+              >
+                <Text style={[styles.dropdownOptionText, { color: colors.text }]}>週別</Text>
+              </TouchableOpacity>
+              
               <TouchableOpacity
                 style={[
                   styles.dropdownOption,
@@ -681,6 +704,20 @@ export default function ProgressScreen() {
             
             {showPeriodDropdown && (
               <View style={[styles.dropdownContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <TouchableOpacity
+                  style={[
+                    styles.dropdownOption,
+                    { borderBottomColor: colors.border },
+                    timeRange === "week" && { backgroundColor: colors.primary + "20" }
+                  ]}
+                  onPress={() => {
+                    setTimeRange("week")
+                    setShowPeriodDropdown(false)
+                  }}
+                >
+                  <Text style={[styles.dropdownOptionText, { color: colors.text }]}>週別</Text>
+                </TouchableOpacity>
+                
                 <TouchableOpacity
                   style={[
                     styles.dropdownOption,

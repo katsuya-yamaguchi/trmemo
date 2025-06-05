@@ -4,7 +4,7 @@ import { supabaseAdmin } from '../_shared/supabaseAdmin.ts';
 
 interface BodyStatRecord {
   weight: number;
-  body_fat?: number;
+  body_fat_percentage?: number;
   date: string; // YYYY-MM-DD format expected from client
 }
 
@@ -32,50 +32,82 @@ serve(async (req) => {
       });
     }
 
-    const { weight, body_fat, date }: BodyStatRecord = await req.json();
+    const { weight, body_fat_percentage, date }: BodyStatRecord = await req.json();
 
+    // バリデーション
     if (!weight || !date) {
-      return new Response(JSON.stringify({ message: '必須項目 (weight, date) が不足しています' }), {
+      return new Response(JSON.stringify({ error: '必須項目 (weight, date) が不足しています' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Validate date format if necessary, assuming YYYY-MM-DD
-    const recordedDate = new Date(date);
-    if (isNaN(recordedDate.getTime())) {
-        return new Response(JSON.stringify({ message: '無効な日付形式です。YYYY-MM-DD形式で送信してください。' }), {
-            status: 400,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+    if (weight <= 0 || weight > 999.99) {
+      return new Response(JSON.stringify({ error: '体重は0より大きく999.99以下で入力してください' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    const { data: insertData, error: insertError } = await supabaseAdmin
+    if (body_fat_percentage !== undefined && (body_fat_percentage < 0 || body_fat_percentage > 100)) {
+      return new Response(JSON.stringify({ error: '体脂肪率は0以上100以下で入力してください' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // 日付フォーマットの検証（YYYY-MM-DD）
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(date)) {
+      return new Response(JSON.stringify({ error: '無効な日付形式です。YYYY-MM-DD形式で送信してください。' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // UPSERT (同じ日の記録があれば更新、なければ挿入)
+    // created_atとupdated_atはアプリケーション側で完全管理
+    const now = new Date().toISOString();
+    
+    // まず既存レコードの存在確認
+    const { data: existingRecord } = await supabaseAdmin
       .from('body_stats')
-      .insert({
+      .select('created_at')
+      .eq('user_id', user.id)
+      .eq('recorded_at', date)
+      .single();
+
+    const { data: upsertData, error: upsertError } = await supabaseAdmin
+      .from('body_stats')
+      .upsert({
         user_id: user.id,
         weight,
-        body_fat_percentage: body_fat,
-        recorded_at: recordedDate.toISOString(),
+        body_fat_percentage: body_fat_percentage || null,
+        recorded_at: date,
+        created_at: existingRecord ? existingRecord.created_at : now, // 既存なら保持、新規なら現在時刻
+        updated_at: now, // 常に現在時刻に更新
+      }, {
+        onConflict: 'user_id,recorded_at',
+        ignoreDuplicates: false // 重複時は更新する
       })
       .select()
       .single();
 
-    if (insertError) {
-      console.error('体重データの記録に失敗しました:', insertError);
-      return new Response(JSON.stringify({ message: '体重データの記録に失敗しました', error: insertError.message }), {
+    if (upsertError) {
+      console.error('体重データの記録に失敗しました:', upsertError);
+      return new Response(JSON.stringify({ error: '体重データの記録に失敗しました', details: upsertError.message }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    return new Response(JSON.stringify({ message: '体重データを記録しました', data: insertData }), {
+    return new Response(JSON.stringify(upsertData), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
   } catch (error) {
     console.error('サーバーエラー:', error);
-    return new Response(JSON.stringify({ message: 'サーバーエラー', error: error.message }), {
+    return new Response(JSON.stringify({ error: 'サーバーエラー', details: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,
     });
