@@ -5,9 +5,11 @@ export default ({ config }) => {
     ...config,
     expo: {
       ...config.expo,
+      slug: 'trmemo-mobile',
       ios: {
         ...config.expo?.ios,
         bundleIdentifier: 'com.mini-schna.trmemo',
+        buildNumber: config.expo?.ios?.buildNumber || "3",
         infoPlist: {
           ...config.expo?.ios?.infoPlist,
           ITSAppUsesNonExemptEncryption: false,

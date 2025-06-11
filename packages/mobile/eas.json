@@ -13,6 +13,12 @@
     "production": {
       "distribution": "store"
     },
+    "testflight": {
+      "distribution": "store",
+      "ios": {
+        "resourceClass": "m-medium"
+      }
+    },
     "ios-simulator": {
       "extends": "development",
       "ios": {
@@ -21,6 +27,12 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {},
+    "testflight": {
+      "ios": {
+        "appleId": "bb.win.3@gmail.com",
+        "ascAppId": "6746823489"
+      }
+    }
   }
 }
