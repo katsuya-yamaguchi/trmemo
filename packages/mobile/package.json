@@ -1,11 +1,11 @@
 {
-  "name": "trmemo-mobile",
+  "name": "trmemo",
   "version": "0.1.0",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
     "android": "expo start --go --android",
-    "ios": "expo start --ios",
+    "ios": "expo run:ios",
     "web": "expo start --go --web"
   },
   "dependencies": {
@@ -34,7 +34,8 @@
     "react-native-screens": "~4.4.0",
     "react-native-svg": "15.8.0",
     "react-native-url-polyfill": "^2.0.0",
-    "zod": "^3.24.1"
+    "zod": "^3.24.1",
+    "expo-updates": "~0.27.4"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",

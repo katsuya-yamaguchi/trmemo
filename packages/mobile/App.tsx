@@ -5,7 +5,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import { SafeAreaProvider } from "react-native-safe-area-context"
 import { StatusBar } from "expo-status-bar"
-import { Home, Dumbbell, BarChart2, User, Library } from "lucide-react-native"
+import { Home, Dumbbell, BarChart2, User } from "lucide-react-native"
 
 // Screens
 import AuthScreen from "./screens/auth-screen"
@@ -15,7 +15,6 @@ import ProgressScreen from "./screens/progress-screen"
 import ProfileScreen from "./screens/profile-screen"
 import TrainingDetailScreen from "./screens/training-detail-screen"
 import OnboardingScreen from "./screens/onboarding-screen"
-import ExerciseLibraryScreen from "./screens/exercise-library-screen"
 import AccountInfoScreen from './screens/account-info-screen'
 import PrivacySettingsScreen from './screens/privacy-settings-screen'
 import HelpSupportScreen from './screens/help-support-screen'
@@ -44,8 +43,6 @@ function MainTabs() {
             return <BarChart2 size={size} color={color} />
           } else if (route.name === "プロフィール") {
             return <User size={size} color={color} />
-          } else if (route.name === "ライブラリ") {
-            return <Library size={size} color={color} />
           }
         },
         tabBarActiveTintColor: "#0891b2",
@@ -55,7 +52,6 @@ function MainTabs() {
     >
       <Tab.Screen name="ホーム" component={HomeScreen} />
       <Tab.Screen name="トレーニング" component={TrainingScreen} />
-      <Tab.Screen name="ライブラリ" component={ExerciseLibraryScreen} />
       <Tab.Screen name="進捗" component={ProgressScreen} />
       <Tab.Screen name="プロフィール" component={ProfileStackNavigator} />
     </Tab.Navigator>

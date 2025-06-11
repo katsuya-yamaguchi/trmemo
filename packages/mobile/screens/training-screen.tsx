@@ -242,32 +242,6 @@ export default function TrainingScreen() {
             </Card>
           )}
         </View>
-
-        <View style={styles.programsSection}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>その他のプログラム</Text>
-
-          <Card style={[styles.programCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.programCardTitle, { color: colors.text }]}>体重減量プログラム</Text>
-            <Text style={[styles.programCardDescription, { color: colors.text }]}>
-              有酸素運動と筋トレを組み合わせた6週間プログラム
-            </Text>
-            <TouchableOpacity style={styles.viewButton}>
-              <Text style={[styles.viewButtonText, { color: colors.primary }]}>詳細を見る</Text>
-              <ChevronRight size={16} color={colors.primary} />
-            </TouchableOpacity>
-          </Card>
-
-          <Card style={[styles.programCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.programCardTitle, { color: colors.text }]}>上級者向け筋肥大プログラム</Text>
-            <Text style={[styles.programCardDescription, { color: colors.text }]}>
-              高強度・高ボリュームの12週間プログラム
-            </Text>
-            <TouchableOpacity style={styles.viewButton}>
-              <Text style={[styles.viewButtonText, { color: colors.primary }]}>詳細を見る</Text>
-              <ChevronRight size={16} color={colors.primary} />
-            </TouchableOpacity>
-          </Card>
-        </View>
       </ScrollView>
     </SafeAreaView>
   )
@@ -401,40 +375,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: "center",
     lineHeight: 20,
-  },
-  programsSection: {
-    marginBottom: 20,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginBottom: 15,
-  },
-  programCard: {
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 15,
-  },
-  programCardTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 5,
-  },
-  programCardDescription: {
-    fontSize: 14,
-    opacity: 0.8,
-    marginBottom: 10,
-  },
-  viewButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-end",
-  },
-  viewButtonText: {
-    fontSize: 14,
-    fontWeight: "500",
-    marginRight: 5,
   },
   loadingContainer: {
     flex: 1,

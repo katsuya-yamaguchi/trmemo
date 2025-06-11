@@ -5,8 +5,10 @@ import { useTheme } from "../context/theme-context"
 import { useAuth } from "../context/auth-context"
 import { Card } from "../components/ui/card"
 import { Button } from "../components/ui/button"
-import { Play, Calendar, Award, TrendingUp, Clock } from "lucide-react-native"
-import { homeApi } from "../services/api"
+import { BodyStatsInputModal } from "../components/ui/body-stats-input-modal"
+import { Play, Calendar, Clock, Scale, Plus } from "lucide-react-native"
+import { homeApi, userApi } from "../services/api"
+import { LatestBodyStats } from "../types/body-stats"
 // import { HomeScreenData } from "../models/homeScreenModel"
 import React from "react"
 
@@ -48,34 +50,51 @@ export default function HomeScreen() {
   const { colors } = useTheme()
   const { user } = useAuth()
   const [homeData, setHomeData] = useState<HomeScreenData | null>(null)
+  const [bodyStats, setBodyStats] = useState<LatestBodyStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [showBodyStatsModal, setShowBodyStatsModal] = useState(false)
+
+  // データを取得する共通関数
+  const fetchData = async () => {
+    if (!user?.id) return
+    
+    try {
+      setLoading(true)
+      console.log("fetchData: Calling APIs...");
+      
+      // ホームデータと体重データを並行取得
+      const [homeResponse, bodyStatsResponse] = await Promise.all([
+        homeApi.getHomeScreenData(),
+        userApi.getLatestBodyStats()
+      ]);
+      
+      console.log("fetchData: API call successful, setting data.");
+      setHomeData(homeResponse)
+      setBodyStats(bodyStatsResponse)
+    } catch (error: any) {
+      console.error("データ取得エラー:", error);
+      Alert.alert("エラー", `データの取得に失敗しました: ${error?.message || '詳細不明'}`);
+    } finally {
+      console.log("fetchData: finally block reached.");
+      setLoading(false)
+    }
+  };
 
   // ホーム画面データを取得
   useEffect(() => {
-    async function fetchHomeData() {
-      if (!user?.id) return
-      
-      try {
-        setLoading(true)
-        console.log("fetchHomeData: Calling homeApi.getHomeScreenData...");
-        const data = await homeApi.getHomeScreenData()
-        console.log("fetchHomeData: API call successful, setting data.");
-        setHomeData(data)
-      } catch (error) {
-        console.error("ホーム画面データ取得エラー (raw object):", error);
-        console.error("ホーム画面データ取得エラー (typeof):", typeof error);
-        console.error("ホーム画面データ取得エラー (message property):", error?.message);
-        console.error("ホーム画面データ取得エラー (toString):", error?.toString());
-        
-        Alert.alert("エラー", `データの取得に失敗しました: ${error?.message || '詳細不明'}`);
-      } finally {
-        console.log("fetchHomeData: finally block reached.");
-        setLoading(false)
-      }
-    }
-
-    fetchHomeData()
+    fetchData()
   }, [user])
+
+  // 体重記録後のデータリフレッシュ
+  const handleBodyStatsUpdate = async () => {
+    try {
+      const bodyStatsResponse = await userApi.getLatestBodyStats();
+      console.log('取得した体重データ:', bodyStatsResponse);
+      setBodyStats(bodyStatsResponse);
+    } catch (error: any) {
+      console.error("体重データリフレッシュエラー:", error);
+    }
+  };
 
   const navigateToTraining = () => {
     if (!homeData) return
@@ -139,6 +158,117 @@ export default function HomeScreen() {
               </Button>
             </Card>
 
+            {/* 体重・体脂肪率カード */}
+            <Card style={[styles.bodyStatsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={styles.bodyStatsHeader}>
+                <View style={styles.bodyStatsTitle}>
+                  <Scale size={20} color={colors.primary} />
+                  <Text style={[styles.bodyStatsTitleText, { color: colors.text }]}>体重・体脂肪率</Text>
+                </View>
+                <Button 
+                  style={[styles.addButton, { backgroundColor: colors.primary }]}
+                  onPress={() => setShowBodyStatsModal(true)}
+                >
+                  <Plus size={16} color="#fff" />
+                </Button>
+              </View>
+
+              {bodyStats ? (
+                <View style={styles.bodyStatsContent}>
+                  {/* 体重表示 */}
+                  <View style={styles.bodyStatRow}>
+                    <Text style={[styles.bodyStatLabel, { color: colors.text }]}>体重</Text>
+                    <View style={styles.bodyStatValue}>
+                      <Text style={[styles.bodyStatNumber, { color: colors.text }]}>
+                        {bodyStats.weight.toFixed(1)}
+                      </Text>
+                      <Text style={[styles.bodyStatUnit, { color: colors.text }]}>kg</Text>
+                      {bodyStats.weightChange !== undefined && (
+                        <View style={[
+                          styles.changeIndicator,
+                          { backgroundColor: bodyStats.weightChange >= 0 ? '#10B981' : '#EF4444' }
+                        ]}>
+                          <Text style={styles.changeText}>
+                            {bodyStats.weightChange >= 0 ? '+' : ''}{bodyStats.weightChange.toFixed(1)}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* 体脂肪率表示 */}
+                  <View style={styles.bodyStatRow}>
+                    <Text style={[styles.bodyStatLabel, { color: colors.text }]}>体脂肪率</Text>
+                    <View style={styles.bodyStatValue}>
+                      {(() => {
+                        console.log('体脂肪率判定:', {
+                          bodyFat: bodyStats.bodyFat,
+                          bodyFatType: typeof bodyStats.bodyFat,
+                          bodyFatChange: bodyStats.bodyFatChange,
+                          previousBodyFat: bodyStats.previousBodyFat,
+                          fullBodyStats: bodyStats
+                        });
+                        
+                        if (bodyStats.bodyFat) {
+                          // 現在の体脂肪率が記録されている場合
+                          return (
+                            <>
+                              <Text style={[styles.bodyStatNumber, { color: colors.text }]}>
+                                {bodyStats.bodyFat.toFixed(1)}
+                              </Text>
+                              <Text style={[styles.bodyStatUnit, { color: colors.text }]}>%</Text>
+                              {bodyStats.bodyFatChange !== undefined && (
+                                <View style={[
+                                  styles.changeIndicator,
+                                  { backgroundColor: bodyStats.bodyFatChange <= 0 ? '#10B981' : '#EF4444' }
+                                ]}>
+                                  <Text style={styles.changeText}>
+                                    {bodyStats.bodyFatChange >= 0 ? '+' : ''}{bodyStats.bodyFatChange.toFixed(1)}
+                                  </Text>
+                                </View>
+                              )}
+                            </>
+                          );
+                        } else if (bodyStats.previousBodyFat) {
+                          // 現在は未記録だが、前回の記録がある場合
+                          return (
+                            <View style={styles.previousDataContainer}>
+                              <Text style={[styles.bodyStatNumber, { color: colors.text, opacity: 0.5 }]}>
+                                {bodyStats.previousBodyFat.toFixed(1)}%
+                              </Text>
+                              <Text style={[styles.previousDataLabel, { color: colors.text }]}>
+                                (前回)
+                              </Text>
+                            </View>
+                          );
+                        } else {
+                          // 完全に未記録の場合
+                          return (
+                            <Text style={[styles.bodyStatNumber, { color: colors.text, opacity: 0.5 }]}>
+                              未記録
+                            </Text>
+                          );
+                        }
+                      })()}
+                    </View>
+                  </View>
+
+                  <Text style={[styles.lastRecordedText, { color: colors.text }]}>
+                    最終記録: {new Date(bodyStats.recordedDate).toLocaleDateString('ja-JP')}
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.noDataContainer}>
+                  <Text style={[styles.noDataText, { color: colors.text }]}>
+                    まだ記録がありません
+                  </Text>
+                  <Text style={[styles.noDataSubText, { color: colors.text }]}>
+                    ＋ボタンから体重を記録しましょう
+                  </Text>
+                </View>
+              )}
+            </Card>
+
             <View style={styles.statsContainer}>
               <Card style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <View style={styles.statHeader}>
@@ -160,36 +290,17 @@ export default function HomeScreen() {
                   {homeData.weeklyProgress.completed}/{homeData.weeklyProgress.total} 完了
                 </Text>
               </Card>
-
-              <Card style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <View style={styles.statHeader}>
-                  <Award size={20} color={colors.primary} />
-                  <Text style={[styles.statTitle, { color: colors.text }]}>最近の達成</Text>
-                </View>
-                <Text style={[styles.achievementTitle, { color: colors.text }]}>{homeData.recentAchievement.title}</Text>
-                <View style={styles.achievementDetails}>
-                  <Text style={[styles.achievementValue, { color: colors.primary }]}>
-                    {homeData.recentAchievement.value}
-                  </Text>
-                  <Text style={[styles.achievementDate, { color: colors.text }]}>
-                    {homeData.recentAchievement.date}
-                  </Text>
-                </View>
-              </Card>
             </View>
-
-            <Card style={[styles.tipsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.tipsHeader}>
-                <TrendingUp size={20} color={colors.primary} />
-                <Text style={[styles.tipsTitle, { color: colors.text }]}>今日のヒント</Text>
-              </View>
-              <Text style={[styles.tipText, { color: colors.text }]}>
-                {homeData.trainingTip.content}
-              </Text>
-            </Card>
           </>
         )}
       </ScrollView>
+      
+      {/* 体重・体脂肪率記録モーダル */}
+      <BodyStatsInputModal
+        visible={showBodyStatsModal}
+        onClose={() => setShowBodyStatsModal(false)}
+        onSave={handleBodyStatsUpdate}
+      />
     </SafeAreaView>
   )
 }
@@ -291,7 +402,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   statCard: {
-    width: "48%",
+    width: "100%",
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
@@ -321,41 +432,96 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: "center",
   },
-  achievementTitle: {
-    fontSize: 14,
-    marginBottom: 10,
-  },
-  achievementDetails: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  achievementValue: {
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  achievementDate: {
-    fontSize: 12,
-    opacity: 0.7,
-  },
-  tipsCard: {
+  bodyStatsCard: {
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
     marginBottom: 20,
   },
-  tipsHeader: {
+  bodyStatsHeader: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 10,
   },
-  tipsTitle: {
+  bodyStatsTitle: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  bodyStatsTitleText: {
     fontSize: 16,
     fontWeight: "600",
     marginLeft: 8,
   },
-  tipText: {
+  addButton: {
+    padding: 8,
+    borderRadius: 20,
+  },
+  bodyStatsContent: {
+    marginTop: 10,
+  },
+  bodyStatRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  bodyStatItem: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  bodyStatLabel: {
     fontSize: 14,
-    lineHeight: 20,
+    fontWeight: "600",
+    marginRight: 8,
+    minWidth: 70,
+  },
+  bodyStatValue: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  bodyStatNumber: {
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  bodyStatUnit: {
+    fontSize: 12,
+    opacity: 0.7,
+  },
+  changeIndicator: {
+    padding: 2,
+    borderRadius: 4,
+    marginLeft: 8,
+  },
+  changeText: {
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  lastRecordedText: {
+    fontSize: 12,
+    opacity: 0.7,
+  },
+  noDataContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  noDataText: {
+    fontSize: 16,
+    fontWeight: "bold",
+    marginBottom: 8,
+  },
+  noDataSubText: {
+    fontSize: 14,
+    opacity: 0.7,
+  },
+  previousDataContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  previousDataLabel: {
+    fontSize: 12,
+    opacity: 0.7,
+    marginLeft: 5,
   },
 })

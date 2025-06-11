@@ -262,13 +262,35 @@ serve(async (req) => {
       // 不要な日を削除
       const dayNumbersToKeep = trainingDays.map(d => d.day_number);
       if (dayNumbersToKeep.length > 0) {
-        const { error: deleteDaysError } = await supabaseClient
+        // 削除対象の日を取得
+        const { data: daysToDelete, error: getDaysError } = await supabaseClient
           .from("user_training_days")
-          .delete()
+          .select("id")
           .eq("user_training_plan_id", planId)
           .not("day_number", "in", `(${dayNumbersToKeep.join(",")})`);
-  
-        if (deleteDaysError) throw deleteDaysError;
+
+        if (getDaysError) throw getDaysError;
+
+        // 各日の関連する種目を先に削除
+        if (daysToDelete && daysToDelete.length > 0) {
+          for (const dayToDelete of daysToDelete) {
+            const { error: deleteExercisesError } = await supabaseClient
+              .from("user_day_exercises")
+              .delete()
+              .eq("user_training_day_id", dayToDelete.id);
+
+            if (deleteExercisesError) throw deleteExercisesError;
+          }
+
+          // その後で日を削除
+          const { error: deleteDaysError } = await supabaseClient
+            .from("user_training_days")
+            .delete()
+            .eq("user_training_plan_id", planId)
+            .not("day_number", "in", `(${dayNumbersToKeep.join(",")})`);
+
+          if (deleteDaysError) throw deleteDaysError;
+        }
       }
 
       return new Response(JSON.stringify({ success: true }), {
@@ -384,17 +406,57 @@ serve(async (req) => {
 
     // プラン削除
     else if (req.method === "DELETE" && planId) {
-      const { error } = await supabaseClient
-        .from("user_training_plans")
-        .delete()
-        .eq("id", planId);
+      const { data: { user } } = await supabaseClient.auth.getUser();
+      if (!user) throw new Error("認証が必要です");
 
-      if (error) throw error;
+      // トランザクション的に削除処理を実行
+      try {
+        // 1. まず該当プランのtraining_daysを取得
+        const { data: trainingDays, error: daysError } = await supabaseClient
+          .from("user_training_days")
+          .select("id")
+          .eq("user_training_plan_id", planId);
 
-      return new Response(JSON.stringify({ success: true }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      });
+        if (daysError) throw daysError;
+
+        // 2. 各training_dayのexercisesを削除
+        if (trainingDays && trainingDays.length > 0) {
+          for (const day of trainingDays) {
+            const { error: exercisesError } = await supabaseClient
+              .from("user_day_exercises")
+              .delete()
+              .eq("user_training_day_id", day.id);
+
+            if (exercisesError) throw exercisesError;
+          }
+
+          // 3. training_daysを削除
+          const { error: daysDeleteError } = await supabaseClient
+            .from("user_training_days")
+            .delete()
+            .eq("user_training_plan_id", planId);
+
+          if (daysDeleteError) throw daysDeleteError;
+        }
+
+        // 4. 最後にプラン本体を削除
+        const { error: planDeleteError } = await supabaseClient
+          .from("user_training_plans")
+          .delete()
+          .eq("id", planId)
+          .eq("user_id", user.id); // セキュリティのため、ユーザーIDも確認
+
+        if (planDeleteError) throw planDeleteError;
+
+        return new Response(JSON.stringify({ success: true, message: "プランが正常に削除されました" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        });
+
+      } catch (deleteError) {
+        console.error("プラン削除中にエラーが発生:", deleteError);
+        throw new Error(`プランの削除に失敗しました: ${deleteError.message}`);
+      }
     }
 
     // プラン取得
