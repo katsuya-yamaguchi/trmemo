@@ -2,8 +2,9 @@
 import Constants from 'expo-constants';
 import { Session, AuthError } from '@supabase/supabase-js';
 import { supabase, supabaseAnonKey, supabaseUrl } from '../lib/supabase';
-import { Exercise, ExerciseLibraryResponse, TrainingPlan } from '../types/exercise';
+import { Exercise, ExerciseLibraryResponse } from '../types/exercise';
 import { BodyStat, BodyStatInput, LatestBodyStats, BodyStatsResponse } from '../types/body-stats';
+import { Workout, CreateWorkoutRequest, UpdateWorkoutRequest, WorkoutsResponse, WorkoutResponse } from '../types/workout';
 
 // APIのベースURL
 // const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
@@ -173,84 +174,43 @@ export const userApi = {
 
 // ワークアウト関連API
 export const workoutApi = {
-  // トレーニングプラン取得
-  getTrainingPlan: async () => {
-    // まず全プランを取得
-    const plans = await fetchWithAuth(`/training-plan`);
-    
-    // プランが存在しない場合はnullを返す
-    if (!plans || plans.length === 0) {
-      return null;
-    }
-    
-    // 最新のプラン（最初のプラン）の詳細を取得
-    const latestPlan = plans[0];
-    return fetchWithAuth(`/training-plan/${latestPlan.id}`);
+  // === 新しいワークアウトAPI ===
+  
+  // 全ワークアウト取得
+  getWorkouts: async (): Promise<WorkoutsResponse> => {
+    return fetchWithAuth('/workout-management');
   },
 
-  // トレーニングプラン作成
-  createTrainingPlan: async (planData: Omit<TrainingPlan, 'id' | 'created_at' | 'updated_at'>) => {
-    return fetchWithAuth(`/training-plan/create`, {
+  // 特定ワークアウト取得
+  getWorkout: async (workoutId: string): Promise<WorkoutResponse> => {
+    return fetchWithAuth(`/workout-management/${workoutId}`);
+  },
+
+  // ワークアウト作成
+  createWorkout: async (workoutData: CreateWorkoutRequest): Promise<WorkoutResponse> => {
+    return fetchWithAuth('/workout-management', {
       method: 'POST',
-      body: JSON.stringify(planData)
+      body: JSON.stringify(workoutData)
     });
   },
 
-  // トレーニングプラン編集
-  updateTrainingPlan: async (planId: string, planData: Partial<TrainingPlan>) => {
-    return fetchWithAuth(`/training-plan/${planId}`, {
+  // ワークアウト更新
+  updateWorkout: async (workoutId: string, workoutData: UpdateWorkoutRequest): Promise<WorkoutResponse> => {
+    return fetchWithAuth(`/workout-management/${workoutId}`, {
       method: 'PUT',
-      body: JSON.stringify(planData)
+      body: JSON.stringify(workoutData)
     });
   },
 
-  // トレーニングプラン削除
-  deleteTrainingPlan: async (planId: string) => {
-    return fetchWithAuth(`/training-plan/${planId}`, {
+  // ワークアウト削除
+  deleteWorkout: async (workoutId: string): Promise<{ message: string }> => {
+    return fetchWithAuth(`/workout-management/${workoutId}`, {
       method: 'DELETE'
     });
   },
 
-  // 特定の日のトレーニング詳細を取得
-  getDayWorkout: async (dayId: string) => {
-    // TODO: このエンドポイントもEdge Functionに移行する必要あり
-    return fetchWithAuth(`/training-plan/day/${dayId}`);
-  },
-
-  // 特定の日のトレーニング内容を更新
-  updateDayWorkout: async (dayId: string, dayData: { title: string; estimated_duration: number; exercises: any[] }) => {
-    return fetchWithAuth(`/training-plan/day/${dayId}`, {
-      method: 'PUT',
-      body: JSON.stringify(dayData)
-    });
-  },
-
-  // トレーニングセッション開始
-  startTrainingSession: async (dayId: string) => {
-    // TODO: このエンドポイントもEdge Functionに移行する必要あり
-    return fetchWithAuth(`/training-session/start`, {
-      method: 'POST',
-      body: JSON.stringify({ dayId })
-    });
-  },
-
-  // トレーニングセッション完了
-  completeTrainingSession: async (sessionId: string) => {
-    // TODO: このエンドポイントもEdge Functionに移行する必要あり
-    return fetchWithAuth(`/training-session/complete`, {
-      method: 'POST',
-      body: JSON.stringify({ sessionId })
-    });
-  },
-
-  // エクササイズセット記録
-  recordExerciseSet: async (sessionId: string, exerciseId: string, setNumber: number, weight: number, reps: number) => {
-    // TODO: このエンドポイントもEdge Functionに移行する必要あり
-    return fetchWithAuth(`/training-session/record`, {
-      method: 'POST',
-      body: JSON.stringify({ sessionId, exerciseId, setNumber, weight, reps })
-    });
-  },
+  // === 廃止されたトレーニングプランAPI ===
+  // 注意: これらの関数は廃止されました。新しいワークアウトAPIを使用してください。
 
   // エクササイズライブラリ取得
   getExerciseLibrary: async (

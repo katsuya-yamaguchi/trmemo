@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, ActivityIndicator, Alert } from 'react-native';
 import { useNavigation, NavigationProp, useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../context/theme-context';
@@ -6,54 +6,22 @@ import { useAuth } from '../context/auth-context';
 import { workoutApi } from '../services/api';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { Calendar, ChevronRight, Dumbbell, Edit2 } from 'lucide-react-native';
+import { Calendar, ChevronRight, Dumbbell, Edit2, Plus } from 'lucide-react-native';
+import { Workout } from '../types/workout';
 
-// --- 型定義 (バックエンドのレスポンスに合わせる) ---
-type ExerciseDetail = {
-  id: string;
-  name: string;
-  sets: number;
-  reps: string; // 例: "8-12"
-};
-
-type TrainingDay = {
-  id: string;
-  day_number: number;
-  title: string;
-  estimated_duration: number;
-  exercises: ExerciseDetail[];
-};
-
-type TrainingPlan = {
-  id: string;
-  name: string;
-  startDate?: string; // オプショナルに変更 (バックエンドのレスポンスによる)
-  trainingDays: TrainingDay[];
-};
-
-// ナビゲーションの型定義
-type RootStackParamList = {
-  Training: undefined;
-  TrainingDetail: { workout: any }; // TrainingDetail に渡す型を調整する必要あり
-  CreateTrainingPlan: { plan?: TrainingPlan }; // プランは任意
-};
-// --- ここまで型定義 ---
-
-export default function TrainingScreen() {
-  const navigation = useNavigation<NavigationProp<RootStackParamList>>();
+export default function NewTrainingScreen() {
+  const navigation = useNavigation<NavigationProp<any>>();
   const { colors } = useTheme();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState(0);
 
-  // --- State の追加 ---
-  const [trainingPlan, setTrainingPlan] = useState<TrainingPlan | null>(null);
+  // State
+  const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // --- useFocusEffect でデータを取得 ---
-  const fetchTrainingPlan = useCallback(async () => {
+  // ワークアウト一覧を取得
+  const fetchWorkouts = useCallback(async () => {
     if (!user?.id) {
-      // ユーザーIDがない場合はエラー状態にしてローディング終了
       setError("ユーザー認証情報が見つかりません。");
       setLoading(false);
       return;
@@ -62,15 +30,11 @@ export default function TrainingScreen() {
     setLoading(true);
     setError(null);
     try {
-      const data: TrainingPlan = await workoutApi.getTrainingPlan();
-      // day_number でソートしておく
-      if (data && data.trainingDays) {
-          data.trainingDays.sort((a, b) => a.day_number - b.day_number);
-      }
-      setTrainingPlan(data);
+      const response = await workoutApi.getWorkouts();
+      setWorkouts(response.workouts || []);
     } catch (err: any) {
-      console.error("Failed to fetch training plan:", err);
-      const errorMessage = err.message || "トレーニングプランの取得に失敗しました";
+      console.error("Failed to fetch workouts:", err);
+      const errorMessage = err.message || "ワークアウトの取得に失敗しました";
       setError(errorMessage);
       Alert.alert("エラー", errorMessage);
     } finally {
@@ -80,37 +44,46 @@ export default function TrainingScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchTrainingPlan();
-    }, [fetchTrainingPlan])
+      fetchWorkouts();
+    }, [fetchWorkouts])
   );
 
-  // トレーニング詳細画面への遷移関数
-  const navigateToWorkout = (day: TrainingDay) => {
-     if (!trainingPlan) return;
-    // TrainingDetailScreen が期待するデータ形式に変換
-     const workoutDataForDetail = {
-       title: day.title,
-       day: `Day ${day.day_number}`,
-       program: trainingPlan.name,
-       exercises: day.exercises.map(ex => ({
-         id: ex.id,
-         name: ex.name,
-         sets: ex.sets,
-         reps: ex.reps
-       })),
-       duration: `${day.estimated_duration}分`,
-       dayId: day.id,
-     };
-     navigation.navigate("TrainingDetail", { workout: workoutDataForDetail });
+  // ワークアウト詳細画面への遷移
+  const navigateToWorkout = (workout: Workout) => {
+    navigation.navigate("WorkoutDetail", { workout });
   };
 
-  // プラン編集
-  const handleEditPlan = () => {
-    if (!trainingPlan) return;
-    navigation.navigate("CreateTrainingPlan", { plan: trainingPlan });
+  // ワークアウト編集
+  const handleEditWorkout = (workout: Workout) => {
+    navigation.navigate("CreateWorkout", { workout });
   };
 
-  // --- ローディングとエラー表示 ---
+  // ワークアウト削除
+  const handleDeleteWorkout = async (workoutId: string) => {
+    Alert.alert(
+      "ワークアウトを削除",
+      "このワークアウトを削除しますか？",
+      [
+        { text: "キャンセル", style: "cancel" },
+        {
+          text: "削除",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await workoutApi.deleteWorkout(workoutId);
+              Alert.alert("完了", "ワークアウトを削除しました");
+              fetchWorkouts(); // リストを再取得
+            } catch (error: any) {
+              console.error("Delete workout error:", error);
+              Alert.alert("エラー", "ワークアウトの削除に失敗しました");
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // ローディング表示
   if (loading) {
     return (
       <SafeAreaView style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
@@ -119,262 +92,137 @@ export default function TrainingScreen() {
     );
   }
 
+  // エラー表示
   if (error) {
     return (
       <SafeAreaView style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
         <Text style={[styles.errorText, { color: colors.error }]}>エラー: {error}</Text>
-        {/* TODO: リトライボタンなどを追加 */}
+        <Button onPress={fetchWorkouts} style={{ marginTop: 16 }}>
+          再試行
+        </Button>
       </SafeAreaView>
     );
   }
-
-  if (!trainingPlan) {
-      return (
-          <SafeAreaView style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
-              <Text style={[{ color: colors.text, marginBottom: 16 }]}>トレーニングプランが見つかりません。</Text>
-              <Button
-                onPress={() => navigation.navigate("CreateTrainingPlan", {})}
-                style={{ paddingHorizontal: 24 }}
-              >
-                プランを作成する
-              </Button>
-          </SafeAreaView>
-      );
-  }
-  // --- ここまで ---
-
-  // アクティブなタブに対応するトレーニング日を取得
-  // trainingDays はソート済みと仮定
-  const activeDay = trainingPlan.trainingDays[activeTab];
-  // 休息日かどうかを判定 (例: exercises が空 or title が "休息日")
-  const isRestDay = !activeDay || activeDay.exercises.length === 0 || activeDay.title.includes("休息日");
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView style={styles.container}>
         <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.text }]}>トレーニングプラン</Text>
-          <View style={styles.programInfo}>
-            <Text style={[styles.programTitle, { color: colors.text }]}>{trainingPlan.name}</Text>
-            <TouchableOpacity onPress={handleEditPlan} style={[styles.editButton, { backgroundColor: colors.primary }]}>
-              <Edit2 size={16} color="#fff" />
-              <Text style={styles.editButtonText}>編集</Text>
-            </TouchableOpacity>
-          </View>
+          <Text style={[styles.title, { color: colors.text }]}>ワークアウト</Text>
+          <TouchableOpacity
+            onPress={() => navigation.navigate("CreateWorkout", {})}
+            style={[styles.createButton, { backgroundColor: colors.primary }]}
+          >
+            <Plus size={16} color="#fff" />
+            <Text style={styles.createButtonText}>新規作成</Text>
+          </TouchableOpacity>
         </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.tabsContainer}
-          contentContainerStyle={styles.tabsContent}
-        >
-          {trainingPlan.trainingDays.map((day, index) => (
-            <TouchableOpacity
-              key={day.id}
-              style={[
-                  styles.tab,
-                  activeTab === index && { backgroundColor: colors.primary },
-                  { borderColor: colors.border }
-              ]}
-              onPress={() => setActiveTab(index)}
+        {workouts.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Dumbbell size={48} color={colors.text} style={{ opacity: 0.3 }} />
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>
+              ワークアウトがありません
+            </Text>
+            <Text style={[styles.emptySubtitle, { color: colors.text, opacity: 0.7 }]}>
+              最初のワークアウトを作成しましょう
+            </Text>
+            <Button
+              onPress={() => navigation.navigate("CreateWorkout", {})}
+              style={{ marginTop: 16 }}
             >
-              <Text style={[styles.tabText, { color: activeTab === index ? "#fff" : colors.text }]}>
-                Day {day.day_number}
-              </Text>
-              <Text style={[styles.tabSubtext, { color: activeTab === index ? "#fff" : colors.text, opacity: 0.7 }]}>
-                {day.title}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        <View style={styles.workoutContainer}>
-          {activeDay && !isRestDay ? (
-            <Card style={[styles.workoutCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.workoutHeader}>
-                <View style={styles.workoutTitleContainer}>
-                  <Dumbbell size={20} color={colors.primary} />
-                  <Text style={[styles.workoutTitle, { color: colors.text }]}>{activeDay.title}</Text>
-                </View>
-                <View style={[styles.durationBadge, { backgroundColor: colors.primary }]}>
-                  <Text style={styles.durationText}>{activeDay.estimated_duration}分</Text>
-                </View>
-              </View>
-
-              <View style={styles.exerciseList}>
-                {activeDay.exercises.map((exercise, index) => (
-                  <View
-                    key={exercise.id}
-                    style={[
-                      styles.exerciseItem,
-                      index < activeDay.exercises.length - 1 && {
-                        borderBottomWidth: 1,
-                        borderBottomColor: colors.border,
-                      },
-                    ]}
-                  >
-                    <Text style={[styles.exerciseName, { color: colors.text }]}>{exercise.name}</Text>
-                    <Text style={[styles.exerciseDetail, { color: colors.text }]}>
-                      {exercise.sets}セット × {exercise.reps}回
-                    </Text>
-                  </View>
-                ))}
-              </View>
-
-              <TouchableOpacity
-                style={[styles.startButton, { backgroundColor: colors.primary }]}
-                onPress={() => navigateToWorkout(activeDay)}
+              ワークアウトを作成
+            </Button>
+          </View>
+        ) : (
+          <View style={styles.workoutsList}>
+            {workouts.map((workout) => (
+              <Card
+                key={workout.id}
+                style={[styles.workoutCard, { backgroundColor: colors.card, borderColor: colors.border }]}
               >
-                <Text style={styles.startButtonText}>トレーニング開始</Text>
-                <ChevronRight size={20} color="#fff" />
-              </TouchableOpacity>
-            </Card>
-          ) : (
-            <Card style={[styles.restDayCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.restDayContent}>
-                <Calendar size={40} color={colors.primary} />
-                <Text style={[styles.restDayTitle, { color: colors.text }]}>休息日</Text>
-                <Text style={[styles.restDayText, { color: colors.text }]}>
-                  今日は休息日です。筋肉の回復を促すために、軽いストレッチやウォーキングがおすすめです。
-                </Text>
-              </View>
-            </Card>
-          )}
-        </View>
+                <TouchableOpacity
+                  onPress={() => navigateToWorkout(workout)}
+                  style={styles.workoutCardContent}
+                >
+                  <View style={styles.workoutHeader}>
+                    <View style={styles.workoutTitleContainer}>
+                      <Dumbbell size={20} color={colors.primary} />
+                      <Text style={[styles.workoutTitle, { color: colors.text }]}>
+                        {workout.title}
+                      </Text>
+                    </View>
+                    <ChevronRight size={20} color={colors.text} style={{ opacity: 0.5 }} />
+                  </View>
+
+                  <View style={styles.workoutInfo}>
+                    <View style={styles.infoItem}>
+                      <Calendar size={14} color={colors.text} style={{ opacity: 0.7 }} />
+                      <Text style={[styles.infoText, { color: colors.text, opacity: 0.7 }]}>
+                        {workout.exercises.length} エクササイズ
+                      </Text>
+                    </View>
+                    {workout.estimated_duration && (
+                      <View style={styles.infoItem}>
+                        <Text style={[styles.infoText, { color: colors.text, opacity: 0.7 }]}>
+                          約 {workout.estimated_duration} 分
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {workout.notes && (
+                    <Text style={[styles.workoutNotes, { color: colors.text, opacity: 0.8 }]} numberOfLines={2}>
+                      {workout.notes}
+                    </Text>
+                  )}
+
+                  <View style={styles.exercisesList}>
+                    {workout.exercises.slice(0, 3).map((exercise, index) => (
+                      <Text
+                        key={exercise.id}
+                        style={[styles.exerciseItem, { color: colors.text, opacity: 0.6 }]}
+                        numberOfLines={1}
+                      >
+                        {index + 1}. {exercise.exercise?.name || `エクササイズ ${index + 1}`}
+                      </Text>
+                    ))}
+                    {workout.exercises.length > 3 && (
+                      <Text style={[styles.exerciseItem, { color: colors.text, opacity: 0.6 }]}>
+                        他 {workout.exercises.length - 3} 種目
+                      </Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+
+                <View style={styles.workoutActions}>
+                  <TouchableOpacity
+                    onPress={() => handleEditWorkout(workout)}
+                    style={[styles.actionButton, { backgroundColor: colors.primary }]}
+                  >
+                    <Edit2 size={14} color="#fff" />
+                    <Text style={styles.actionButtonText}>編集</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => handleDeleteWorkout(workout.id)}
+                    style={[styles.actionButton, { backgroundColor: colors.error }]}
+                  >
+                    <Text style={styles.actionButtonText}>削除</Text>
+                  </TouchableOpacity>
+                </View>
+              </Card>
+            ))}
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
-  },
-  header: {
-    marginBottom: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 5,
-  },
-  programInfo: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 4,
-  },
-  programTitle: {
-    fontSize: 16,
-    fontWeight: "500",
-    flex: 1,
-    marginRight: 12,
-  },
-  tabsContainer: {
-    marginBottom: 20,
-  },
-  tabsContent: {
-    paddingRight: 16,
-  },
-  tab: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginRight: 10,
-    minWidth: 100,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  tabText: {
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  tabSubtext: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  workoutContainer: {
-    marginBottom: 30,
-  },
-  workoutCard: {
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  workoutHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 15,
-  },
-  workoutTitleContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  workoutTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginLeft: 8,
-  },
-  durationBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-  },
-  durationText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  exerciseList: {
-    marginBottom: 20,
-  },
-  exerciseItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-  },
-  exerciseName: {
-    fontSize: 16,
-  },
-  exerciseDetail: {
-    fontSize: 14,
-    opacity: 0.8,
-  },
-  startButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    height: 50,
-    borderRadius: 25,
-  },
-  startButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-    marginRight: 5,
-  },
-  restDayCard: {
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  restDayContent: {
-    alignItems: "center",
-    padding: 20,
-  },
-  restDayTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    marginTop: 15,
-    marginBottom: 10,
-  },
-  restDayText: {
-    fontSize: 14,
-    textAlign: "center",
-    lineHeight: 20,
   },
   loadingContainer: {
     flex: 1,
@@ -383,21 +231,122 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   errorText: {
-      fontSize: 16,
-      textAlign: 'center',
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 16,
   },
-  editButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    flexDirection: "row",
-    alignItems: "center",
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  createButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: 8,
   },
-  editButtonText: {
-    color: "#fff",
+  createButtonText: {
+    color: '#fff',
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: '600',
     marginLeft: 4,
   },
-})
-
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 64,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  workoutsList: {
+    gap: 16,
+  },
+  workoutCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  workoutCardContent: {
+    padding: 16,
+  },
+  workoutHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  workoutTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  workoutTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+    flex: 1,
+  },
+  workoutInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 16,
+  },
+  infoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  infoText: {
+    fontSize: 12,
+  },
+  workoutNotes: {
+    fontSize: 14,
+    marginBottom: 12,
+    lineHeight: 20,
+  },
+  exercisesList: {
+    gap: 4,
+  },
+  exerciseItem: {
+    fontSize: 12,
+  },
+  workoutActions: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.1)',
+    paddingTop: 12,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    gap: 8,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    gap: 4,
+  },
+  actionButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+}); 

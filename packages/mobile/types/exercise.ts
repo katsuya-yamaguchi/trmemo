@@ -21,36 +21,5 @@ export type ExerciseLibraryResponse = {
   total: number;
 };
 
-// トレーニングプランの種目
-export type PlanExercise = {
-  id: string;
-  name: string;
-  type: ExerciseType;
-  imageUrl: string;
-  description: string;
-  targetMuscles: string[];
-  difficulty: "beginner" | "intermediate" | "advanced";
-  equipment: string[];
-  sets: number;
-  reps: string;
-  default_weight?: string;
-};
-
-// トレーニング日
-export type TrainingDay = {
-  id: string;
-  day_number: number;
-  title: string;
-  estimated_duration: number;
-  exercises: PlanExercise[];
-};
-
-// トレーニングプラン
-export type TrainingPlan = {
-  id: string;
-  name: string;
-  startDate?: string;
-  trainingDays: TrainingDay[];
-  created_at?: string;
-  updated_at?: string;
-}; 
+// 注意: トレーニングプラン関連の型は廃止されました
+// 新しいワークアウト構造は packages/mobile/types/workout.ts を使用してください 

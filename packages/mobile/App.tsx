@@ -10,10 +10,8 @@ import { Home, Dumbbell, BarChart2, User } from "lucide-react-native"
 // Screens
 import AuthScreen from "./screens/auth-screen"
 import HomeScreen from "./screens/home-screen"
-import TrainingScreen from "./screens/training-screen"
 import ProgressScreen from "./screens/progress-screen"
 import ProfileScreen from "./screens/profile-screen"
-import TrainingDetailScreen from "./screens/training-detail-screen"
 import OnboardingScreen from "./screens/onboarding-screen"
 import AccountInfoScreen from './screens/account-info-screen'
 import PrivacySettingsScreen from './screens/privacy-settings-screen'
@@ -21,7 +19,9 @@ import HelpSupportScreen from './screens/help-support-screen'
 import ContactUsScreen from './screens/contact-us-screen'
 import TermsOfServiceScreen from './screens/terms-of-service-screen'
 import PrivacyPolicyScreen from './screens/privacy-policy-screen'
-import CreateTrainingPlanScreen from './screens/create-training-plan-screen'
+import TrainingScreen from './screens/training-screen'
+import CreateWorkoutScreen from './screens/create-workout-screen'
+import WorkoutDetailScreen from './screens/workout-detail-screen'
 
 // Context
 import { AuthProvider, useAuth } from "./context/auth-context"
@@ -101,22 +101,20 @@ function AppNavigator() {
       ) : (
         <>
           <Stack.Screen name="Main" component={MainTabs} />
+
+
           <Stack.Screen
-            name="TrainingDetail"
-            component={TrainingDetailScreen}
+            name="CreateWorkout"
+            component={CreateWorkoutScreen}
             options={{
-              headerShown: true,
-              title: "トレーニング詳細",
-              headerBackTitle: "戻る",
+              headerShown: false,
             }}
           />
           <Stack.Screen
-            name="CreateTrainingPlan"
-            component={CreateTrainingPlanScreen}
+            name="WorkoutDetail"
+            component={WorkoutDetailScreen}
             options={{
-              headerShown: true,
-              title: "トレーニングプラン作成",
-              headerBackTitle: "戻る",
+              headerShown: false,
             }}
           />
         </>
