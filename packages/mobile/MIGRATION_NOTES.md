@@ -73,7 +73,33 @@ user_workouts (direct workout management)
 - 4エクササイズが適切な順序で移行済み
 - 2ユーザーのデータが完全に保持済み
 
+## 削除実行日
+2025年1月13日 22:50 JST
+
+### 削除されたデータベーステーブル
+- `training_plans` - バックアップ済み
+- `user_training_plans` - バックアップ済み
+- `user_training_days` - バックアップ済み
+- `user_day_exercises` - バックアップ済み
+- `training_plans_id_seq` - シーケンス削除
+- `user_training_plans_base_plan_id_seq` - シーケンス削除
+
+### 削除されたEdge Functions
+- `supabase/functions/training-plan/` - 完全削除
+- `supabase/functions/training-session/` - 完全削除
+
+### バックアップテーブル（保持中）
+- `backup_training_plans` ✅ バックアップ保持
+- `backup_user_training_plans` ✅ バックアップ保持
+- `backup_user_training_days` ✅ バックアップ保持
+- `backup_user_day_exercises` ✅ バックアップ保持
+
 ## 注意事項
-- 古いトレーニングプラン関連のコードは完全に削除されました
-- 新しいワークアウト構造のみを使用してください
-- データベースの古いテーブルは段階的に削除予定です 
+- ✅ 古いトレーニングプラン関連のコードは完全に削除されました
+- ✅ 古いデータベーステーブルは安全にバックアップ後削除されました
+- ✅ 古いEdge Functionsは完全に削除されました
+- ✅ 新しいワークアウト構造のみを使用してください
+- ⚠️ バックアップテーブルは必要に応じて将来削除可能です
+
+## 完了ステータス
+🎉 **移行完全完了** - 新しいワークアウトシステムが完全に稼働中 

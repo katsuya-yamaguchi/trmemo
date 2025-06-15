@@ -10,7 +10,7 @@ export default ({ config }) => {
       ios: {
         ...config.expo?.ios,
         bundleIdentifier: 'com.mini-schna.trmemo',
-        buildNumber: config.expo?.ios?.buildNumber || "4",
+        buildNumber: config.expo?.ios?.buildNumber || "5",
         infoPlist: {
           ...config.expo?.ios?.infoPlist,
           ITSAppUsesNonExemptEncryption: false,
